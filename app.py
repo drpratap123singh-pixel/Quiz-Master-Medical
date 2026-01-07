@@ -79,7 +79,7 @@ def extract_text_from_pdf(file):
         return text
     except: return None
 
-# --- AI ENGINE (WITH AUTO-RETRY) ---
+# --- AI ENGINE (WITH VISUAL COUNTDOWN TIMER) ---
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
@@ -92,13 +92,12 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     """
     
     if previous_questions:
-        # Only send the last 20 questions to save tokens (prevents overload)
         prompt += f"\nAvoid these questions: {previous_questions[-20:]}"
     
     content = [prompt]
     
     if input_type == "Text/PDF" and context_data:
-        prompt += f"\nContext: {context_data[:10000]}..." # Limit context to save speed
+        prompt += f"\nContext: {context_data[:10000]}..."
         content = [prompt]
     elif input_type == "Image" and context_data:
         prompt += "\nAnalyze image."
@@ -119,13 +118,17 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     if input_type != "Image": content = [prompt]
     else: content[0] = prompt
 
-    # --- RETRY LOGIC ---
+    # --- SMART RETRY WITH VISUAL TIMER ---
     max_retries = 3
+    timer_placeholder = st.empty() # Placeholder for the countdown
+    
     for attempt in range(max_retries):
         try:
             response = model.generate_content(content)
-            # Check for empty response
             if not response.text: raise ValueError("Empty response")
+            
+            # If successful, clear any timer message
+            timer_placeholder.empty()
             
             txt = response.text
             start = txt.find('[')
@@ -137,8 +140,12 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
 
         except ResourceExhausted:
             if attempt < max_retries - 1:
-                st.toast(f"⚠️ Speed limit hit. Waiting 10s... (Attempt {attempt+1}/{max_retries})")
-                time.sleep(10) # Auto-wait
+                # VISUAL COUNTDOWN LOOP
+                wait_time = 20 # Seconds to wait
+                for t in range(wait_time, 0, -1):
+                    timer_placeholder.warning(f"⚠️ Speed limit hit. Cooling down... {t}s")
+                    time.sleep(1)
+                timer_placeholder.empty() # Clear timer before retrying
                 continue
             else:
                 st.error("❌ Quota exceeded. Please wait 1 minute and try again.")
@@ -276,7 +283,8 @@ elif st.session_state.page == "scorecard":
     c1.download_button("📥 Download Report", report, "quiz_report.txt")
     
     if c2.button("🔄 Add 10 More"):
-        with st.spinner("Adding (this may take 20s)..."):
+        # The spinner will show briefly, then the Timer will take over if needed
+        with st.spinner("Talking to AI..."):
             exist = [q['question'] for q in st.session_state.quiz_data]
             new_data = generate_quiz(st.session_state.current_model, st.session_state.current_topic, 10, st.session_state.current_difficulty, st.session_state.current_input_type, st.session_state.current_context, exist)
             if new_data:
