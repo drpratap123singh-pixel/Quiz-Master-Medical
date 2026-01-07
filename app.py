@@ -1,8 +1,10 @@
 import streamlit as st
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
 import json
 import os
 import datetime
+import time
 from PIL import Image
 import PyPDF2
 
@@ -10,7 +12,6 @@ import PyPDF2
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    # Local fallback (for testing on laptop)
     api_key = "PASTE_YOUR_KEY_HERE_ONLY_FOR_LOCAL"
 
 genai.configure(api_key=api_key)
@@ -35,7 +36,6 @@ def get_working_models():
 
 # --- DATA MANAGER ---
 def load_history():
-    # Only load history if file exists (Local mode mostly)
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r") as f: return json.load(f)
@@ -43,23 +43,19 @@ def load_history():
     return []
 
 def save_quiz_to_history(topic, score, total, questions, user_answers):
-    # History saving is best effort on Cloud
+    history = load_history()
+    entry = {
+        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "topic": topic,
+        "score": f"{score}/{total}",
+        "data": questions,
+        "user_answers": user_answers
+    }
+    history.insert(0, entry) 
     try:
-        history = load_history()
-        entry = {
-            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "topic": topic,
-            "score": f"{score}/{total}",
-            "data": questions,
-            "user_answers": user_answers
-        }
-        history.insert(0, entry) 
-        # On cloud, writing to files is temporary, but we keep it for session
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, "w") as f: json.dump(history, f)
-        return history
-    except:
-        return []
+        with open(HISTORY_FILE, "w") as f: json.dump(history, f)
+    except: pass
+    return history
 
 # --- REPORT GENERATOR ---
 def create_text_report(topic, score, total, questions, user_answers):
@@ -83,7 +79,7 @@ def extract_text_from_pdf(file):
         return text
     except: return None
 
-# --- AI ENGINE (UPDATED WITH SMART CLEANER) ---
+# --- AI ENGINE (WITH AUTO-RETRY) ---
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
@@ -96,12 +92,13 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     """
     
     if previous_questions:
-        prompt += f"\nAvoid these questions: {previous_questions[-50:]}"
+        # Only send the last 20 questions to save tokens (prevents overload)
+        prompt += f"\nAvoid these questions: {previous_questions[-20:]}"
     
     content = [prompt]
     
     if input_type == "Text/PDF" and context_data:
-        prompt += f"\nContext: {context_data[:15000]}..."
+        prompt += f"\nContext: {context_data[:10000]}..." # Limit context to save speed
         content = [prompt]
     elif input_type == "Image" and context_data:
         prompt += "\nAnalyze image."
@@ -122,29 +119,41 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     if input_type != "Image": content = [prompt]
     else: content[0] = prompt
 
-    response = model.generate_content(content)
-    
-    # --- SMART JSON CLEANER (THE FIX) ---
-    # This finds the first '[' and last ']' to ignore extra text
-    try:
-        txt = response.text
-        start = txt.find('[')
-        end = txt.rfind(']') + 1
-        if start != -1 and end != -1:
-            json_str = txt[start:end]
-            return json.loads(json_str)
-        else:
-            # Fallback
-            return json.loads(txt.replace("```json", "").replace("```", "").strip())
-    except Exception as e:
-        st.error(f"AI Generation Error: {e}")
-        return []
+    # --- RETRY LOGIC ---
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(content)
+            # Check for empty response
+            if not response.text: raise ValueError("Empty response")
+            
+            txt = response.text
+            start = txt.find('[')
+            end = txt.rfind(']') + 1
+            if start != -1 and end != -1:
+                return json.loads(txt[start:end])
+            else:
+                return json.loads(txt.replace("```json", "").replace("```", "").strip())
+
+        except ResourceExhausted:
+            if attempt < max_retries - 1:
+                st.toast(f"⚠️ Speed limit hit. Waiting 10s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(10) # Auto-wait
+                continue
+            else:
+                st.error("❌ Quota exceeded. Please wait 1 minute and try again.")
+                return []
+        except Exception as e:
+            st.error(f"Error: {e}")
+            return []
+    return []
 
 # --- APP UI ---
 if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
 if 'current_index' not in st.session_state: st.session_state.current_index = 0
+
 if 'history' not in st.session_state: st.session_state.history = load_history()
 
 # Persist settings
@@ -159,6 +168,17 @@ with st.sidebar:
     if st.button("🏠 New Quiz"):
         st.session_state.page = "home"
         st.rerun()
+
+    st.subheader("📜 Recent History")
+    if st.session_state.history:
+        for i, item in enumerate(st.session_state.history):
+            label = f"{item['topic']} ({item['score']})"
+            if st.button(label, key=f"hist_{i}"):
+                st.session_state.quiz_data = item['data']
+                st.session_state.user_answers = item.get('user_answers', {})
+                st.session_state.current_index = 0
+                st.session_state.page = "scorecard" 
+                st.rerun()
 
 if st.session_state.page == "home":
     st.title("🚀 Generate Quiz")
@@ -205,14 +225,25 @@ elif st.session_state.page == "quiz":
     st.subheader(f"Q: {q['question']}")
     
     opts = list(q['options'].keys())
-    sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}: {q['options'][x]}", key=st.session_state.current_index)
+    radio_key = f"radio_{st.session_state.current_index}"
+    
+    prev = st.session_state.user_answers.get(st.session_state.current_index)
+    idx = opts.index(prev) if prev in opts else 0
+    
+    sel = st.radio(
+        "Choose:", 
+        opts, 
+        format_func=lambda x: f"{x}: {q['options'][x]}", 
+        key=radio_key,
+        index=idx if prev else None
+    )
+    
+    if sel: st.session_state.user_answers[st.session_state.current_index] = sel
     
     c1, c2 = st.columns(2)
     if c1.button("Prev") and st.session_state.current_index > 0:
         st.session_state.current_index -= 1
         st.rerun()
-    
-    if sel: st.session_state.user_answers[st.session_state.current_index] = sel
     
     if st.session_state.current_index < len(st.session_state.quiz_data) - 1:
         if c2.button("Next"):
@@ -228,16 +259,29 @@ elif st.session_state.page == "scorecard":
     score = sum([1 for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)==q['correct_option']])
     st.title(f"Score: {score}/{len(st.session_state.quiz_data)}")
     
+    if 'saved' not in st.session_state:
+        new_history = save_quiz_to_history(
+            st.session_state.current_topic, 
+            score, 
+            len(st.session_state.quiz_data), 
+            st.session_state.quiz_data, 
+            st.session_state.user_answers
+        )
+        st.session_state.history = new_history
+        st.session_state.saved = True
+        st.rerun()
+    
     c1, c2 = st.columns(2)
     report = create_text_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
     c1.download_button("📥 Download Report", report, "quiz_report.txt")
     
     if c2.button("🔄 Add 10 More"):
-        with st.spinner("Adding..."):
+        with st.spinner("Adding (this may take 20s)..."):
             exist = [q['question'] for q in st.session_state.quiz_data]
             new_data = generate_quiz(st.session_state.current_model, st.session_state.current_topic, 10, st.session_state.current_difficulty, st.session_state.current_input_type, st.session_state.current_context, exist)
             if new_data:
                 st.session_state.quiz_data.extend(new_data)
+                if 'saved' in st.session_state: del st.session_state['saved']
                 st.session_state.page = "quiz"
                 st.session_state.current_index = len(exist)
                 st.rerun()
@@ -252,4 +296,5 @@ elif st.session_state.page == "scorecard":
     
     if st.button("Home"):
         st.session_state.page = "home"
+        if 'saved' in st.session_state: del st.session_state['saved']
         st.rerun()
