@@ -271,6 +271,26 @@ elif st.session_state.page == "scorecard":
         st.session_state.history = new_history
         st.session_state.saved = True
         st.rerun()
+
+    # --- TOP DASHBOARD (HIGH VISIBILITY) ---
+    correct_indices = []
+    wrong_indices = []
+    
+    for i, q in enumerate(st.session_state.quiz_data):
+        ans = st.session_state.user_answers.get(i)
+        if ans == q['correct_option']:
+            correct_indices.append(str(i + 1))
+        else:
+            wrong_indices.append(str(i + 1))
+            
+    d1, d2 = st.columns(2)
+    with d1:
+        st.error(f"❌ **Mistakes ({len(wrong_indices)}):**\n\n" + ", ".join(wrong_indices) if wrong_indices else "None! 🎉")
+    with d2:
+        st.success(f"✅ **Correct ({len(correct_indices)}):**\n\n" + ", ".join(correct_indices) if correct_indices else "None")
+    
+    st.divider()
+    # ----------------------------------------
     
     c1, c2 = st.columns(2)
     report = create_text_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
@@ -287,48 +307,9 @@ elif st.session_state.page == "scorecard":
                 st.session_state.current_index = len(exist)
                 st.rerun()
 
-    # --- QUICK NAVIGATION DASHBOARD ---
-    st.divider()
-    st.subheader("🔍 Review Dashboard")
-    
-    correct_nums = []
-    wrong_nums = []
-    
-    # Sort questions into lists
+    st.subheader("📝 Review Answers")
     for i, q in enumerate(st.session_state.quiz_data):
         ans = st.session_state.user_answers.get(i)
-        if ans == q['correct_option']:
-            correct_nums.append(i + 1)
-        else:
-            wrong_nums.append(i + 1)
-
-    nc1, nc2 = st.columns(2)
-    with nc1:
-        st.markdown("### ✅ Correct")
-        # Create clickable links for correct answers
-        if correct_nums:
-            links = [f"[{n}](#q{n})" for n in correct_nums]
-            st.markdown(" | ".join(links))
-        else:
-            st.caption("None")
-
-    with nc2:
-        st.markdown("### ❌ Wrong")
-        # Create clickable links for wrong answers
-        if wrong_nums:
-            links = [f"[{n}](#q{n})" for n in wrong_nums]
-            st.markdown(" | ".join(links))
-        else:
-            st.caption("None (Great Job!)")
-    
-    st.divider()
-    # ----------------------------------
-
-    for i, q in enumerate(st.session_state.quiz_data):
-        ans = st.session_state.user_answers.get(i)
-        
-        # Add Anchor ID for jumping
-        st.markdown(f"<div id='q{i+1}'></div>", unsafe_allow_html=True)
         
         # Color Logic
         if ans == q['correct_option']:
@@ -339,7 +320,6 @@ elif st.session_state.page == "scorecard":
         with st.expander(expander_header):
             st.write(f"**Your Answer:** {ans} | **Correct:** {q['correct_option']}")
             
-            # Show options clearly
             st.markdown("#### Options:")
             for opt, txt in q['options'].items():
                 if opt == q['correct_option']:
