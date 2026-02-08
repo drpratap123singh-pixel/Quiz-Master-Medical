@@ -12,7 +12,7 @@ import PyPDF2
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    api_key = "PASTE_YOUR_KEY_HERE_ONLY_FOR_LOCAL"
+    api_key = "AIzaSyCALi66mEwDOlIG4uZyxl-29y3euC4_dq4"
 
 genai.configure(api_key=api_key)
 
@@ -79,7 +79,7 @@ def extract_text_from_pdf(file):
         return text
     except: return None
 
-# --- AI ENGINE (WITH VISUAL COUNTDOWN TIMER) ---
+# --- AI ENGINE ---
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
@@ -118,18 +118,14 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     if input_type != "Image": content = [prompt]
     else: content[0] = prompt
 
-    # --- SMART RETRY WITH VISUAL TIMER ---
     max_retries = 3
-    timer_placeholder = st.empty() # Placeholder for the countdown
+    timer_placeholder = st.empty()
     
     for attempt in range(max_retries):
         try:
             response = model.generate_content(content)
             if not response.text: raise ValueError("Empty response")
-            
-            # If successful, clear any timer message
             timer_placeholder.empty()
-            
             txt = response.text
             start = txt.find('[')
             end = txt.rfind(']') + 1
@@ -140,12 +136,11 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
 
         except ResourceExhausted:
             if attempt < max_retries - 1:
-                # VISUAL COUNTDOWN LOOP
-                wait_time = 20 # Seconds to wait
+                wait_time = 20
                 for t in range(wait_time, 0, -1):
                     timer_placeholder.warning(f"⚠️ Speed limit hit. Cooling down... {t}s")
                     time.sleep(1)
-                timer_placeholder.empty() # Clear timer before retrying
+                timer_placeholder.empty()
                 continue
             else:
                 st.error("❌ Quota exceeded. Please wait 1 minute and try again.")
@@ -163,7 +158,6 @@ if 'current_index' not in st.session_state: st.session_state.current_index = 0
 
 if 'history' not in st.session_state: st.session_state.history = load_history()
 
-# Persist settings
 for key in ['current_topic', 'current_context', 'current_input_type', 'current_difficulty', 'current_model']:
     if key not in st.session_state: st.session_state[key] = None
 
@@ -283,7 +277,6 @@ elif st.session_state.page == "scorecard":
     c1.download_button("📥 Download Report", report, "quiz_report.txt")
     
     if c2.button("🔄 Add 10 More"):
-        # The spinner will show briefly, then the Timer will take over if needed
         with st.spinner("Talking to AI..."):
             exist = [q['question'] for q in st.session_state.quiz_data]
             new_data = generate_quiz(st.session_state.current_model, st.session_state.current_topic, 10, st.session_state.current_difficulty, st.session_state.current_input_type, st.session_state.current_context, exist)
@@ -294,13 +287,70 @@ elif st.session_state.page == "scorecard":
                 st.session_state.current_index = len(exist)
                 st.rerun()
 
+    # --- QUICK NAVIGATION DASHBOARD ---
+    st.divider()
+    st.subheader("🔍 Review Dashboard")
+    
+    correct_nums = []
+    wrong_nums = []
+    
+    # Sort questions into lists
     for i, q in enumerate(st.session_state.quiz_data):
         ans = st.session_state.user_answers.get(i)
-        color = "green" if ans == q['correct_option'] else "red"
-        with st.expander(f"Q{i+1} [{color}]: {q['question']}"):
-            st.write(f"Correct: {q['correct_option']}")
-            st.info(q['explanation'])
-            st.warning(q['extra_edge'])
+        if ans == q['correct_option']:
+            correct_nums.append(i + 1)
+        else:
+            wrong_nums.append(i + 1)
+
+    nc1, nc2 = st.columns(2)
+    with nc1:
+        st.markdown("### ✅ Correct")
+        # Create clickable links for correct answers
+        if correct_nums:
+            links = [f"[{n}](#q{n})" for n in correct_nums]
+            st.markdown(" | ".join(links))
+        else:
+            st.caption("None")
+
+    with nc2:
+        st.markdown("### ❌ Wrong")
+        # Create clickable links for wrong answers
+        if wrong_nums:
+            links = [f"[{n}](#q{n})" for n in wrong_nums]
+            st.markdown(" | ".join(links))
+        else:
+            st.caption("None (Great Job!)")
+    
+    st.divider()
+    # ----------------------------------
+
+    for i, q in enumerate(st.session_state.quiz_data):
+        ans = st.session_state.user_answers.get(i)
+        
+        # Add Anchor ID for jumping
+        st.markdown(f"<div id='q{i+1}'></div>", unsafe_allow_html=True)
+        
+        # Color Logic
+        if ans == q['correct_option']:
+            expander_header = f"✅ **Q{i+1}**: :green[{q['question']}]"
+        else:
+            expander_header = f"❌ **Q{i+1}**: :red[{q['question']}]"
+
+        with st.expander(expander_header):
+            st.write(f"**Your Answer:** {ans} | **Correct:** {q['correct_option']}")
+            
+            # Show options clearly
+            st.markdown("#### Options:")
+            for opt, txt in q['options'].items():
+                if opt == q['correct_option']:
+                    st.success(f"{opt}: {txt}")
+                elif opt == ans:
+                    st.error(f"{opt}: {txt}")
+                else:
+                    st.write(f"{opt}: {txt}")
+
+            st.info(f"**Explanation:** {q['explanation']}")
+            st.warning(f"**Extra Edge:** {q['extra_edge']}")
     
     if st.button("Home"):
         st.session_state.page = "home"
