@@ -8,11 +8,14 @@ import time
 from PIL import Image
 import PyPDF2
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION (THE PERMANENT FIX) ---
 try:
+    # This grabs the key from the "Safe" (Streamlit Cloud Secrets)
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    api_key = "AIzaSyCALi66mEwDOlIG4uZyxl-29y3euC4_dq4"
+    # This is a placeholder. DO NOT PASTE YOUR REAL KEY HERE FOR GITHUB.
+    # Only paste your key here if you are running on your LAPTOP manually.
+    api_key = "PASTE_YOUR_KEY_HERE_ONLY_FOR_LOCAL"
 
 genai.configure(api_key=api_key)
 
