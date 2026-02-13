@@ -19,46 +19,66 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- DYNAMIC FONT & THEME ENGINE ---
+# --- IMPROVED VISIBILITY ENGINE ---
 if 'font_size' not in st.session_state: st.session_state.font_size = 20
 
-def apply_custom_styles(theme):
+def apply_ui_theme(theme):
     f_size = st.session_state.font_size
     
+    # Precise contrast colors
     themes = {
-        "Light": {"bg": "#ffffff", "text": "#1a1a1a", "card": "#f8f9fa", "sub": "#495057"},
-        "Dark": {"bg": "#0e1117", "text": "#ffffff", "card": "#262730", "sub": "#bfbfbf"},
-        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "card": "#e4dcc8", "sub": "#5f4b32"}
+        "Light": {"bg": "#ffffff", "text": "#000000", "card": "#f0f2f6", "btn_txt": "#000000"},
+        "Dark": {"bg": "#0e1117", "text": "#ffffff", "card": "#262730", "btn_txt": "#ffffff"},
+        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "card": "#e4dcc8", "btn_txt": "#433422"}
     }
     colors = themes.get(theme, themes["Light"])
 
+    # This CSS forces transparency away and locks high contrast
     st.markdown(f"""
         <style>
         .stApp {{ background-color: {colors['bg']}; color: {colors['text']}; }}
         
-        /* Force high contrast visibility at all times (NO FADING) */
-        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label {{
+        /* Force ALL text to be solid and clear */
+        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p {{
             font-size: {f_size}px !important;
             color: {colors['text']} !important;
-            opacity: 1 !important;
-            filter: none !important;
+            opacity: 1.0 !important;
+            line-height: 1.6 !important;
         }}
         
-        .stCaption {{ font-size: {f_size - 4}px !important; color: {colors['sub']} !important; }}
+        /* Fix the "Dark Box" issue on buttons and expanders */
+        .stButton>button {{
+            background-color: {colors['card']} !important;
+            color: {colors['btn_txt']} !important;
+            border: 2px solid {colors['text']} !important;
+            opacity: 1.0 !important;
+        }}
         
-        /* Make expanders and cards bright and clear */
         .streamlit-expanderHeader, .stExpander {{
             background-color: {colors['card']} !important;
-            border: 1px solid {colors['sub']} !important;
+            color: {colors['text']} !important;
+            border: 1px solid {colors['text']} !important;
+            opacity: 1.0 !important;
         }}
-        
-        /* Better button visibility */
-        .stButton>button {{
-            border: 2px solid {colors['sub']} !important;
-            font-weight: bold !important;
+
+        /* Fix specific Dark Mode fade-out */
+        div[data-testid="stMarkdownContainer"] p {{
+            color: {colors['text']} !important;
         }}
         </style>
     """, unsafe_allow_html=True)
+
+# --- FONT CONTROLS (STAY AT TOP) ---
+def render_top_bar():
+    c1, c2, c3 = st.columns([8, 1, 1])
+    with c2:
+        if st.button("➖"): 
+            st.session_state.font_size = max(12, st.session_state.font_size - 2)
+            st.rerun()
+    with c3:
+        if st.button("➕"): 
+            st.session_state.font_size = min(40, st.session_state.font_size + 2)
+            st.rerun()
 
 # --- 1. AUTO-DETECT WORKING MODELS ---
 @st.cache_data
@@ -130,18 +150,6 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         except: return []
     return []
 
-# --- SHARED UI: FONT CONTROLS ---
-def render_font_controls():
-    c1, c2, c3 = st.columns([8, 1, 1])
-    with c2:
-        if st.button("➖"): 
-            st.session_state.font_size = max(12, st.session_state.font_size - 2)
-            st.rerun()
-    with c3:
-        if st.button("➕"): 
-            st.session_state.font_size = min(40, st.session_state.font_size + 2)
-            st.rerun()
-
 # --- APP UI ---
 if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
@@ -162,8 +170,9 @@ with st.sidebar:
         if st.button(f"{item['topic']} ({item['score']})", key=f"hist_{i}"):
             st.session_state.quiz_data = item['data']; st.session_state.user_answers = item.get('user_answers', {}); st.session_state.current_index = 0; st.session_state.page = "scorecard"; st.rerun()
 
-apply_custom_styles(theme_choice)
-render_font_controls()
+# Apply Theme and Render Font Controls at top
+apply_ui_theme(theme_choice)
+render_top_bar()
 
 if st.session_state.page == "home":
     st.title("🚀 Generate Quiz")
