@@ -19,80 +19,87 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- THE "PERMANENT CLARITY" CSS ENGINE ---
-if 'font_size' not in st.session_state: st.session_state.font_size = 20
+# --- FIXED SEPIA & BLACK TEXT ENGINE ---
+if 'font_size' not in st.session_state: st.session_state.font_size = 22
 
-def apply_ui_theme(theme):
+def apply_sepia_theme():
     f_size = st.session_state.font_size
-    themes = {
-        "Light": {"bg": "#ffffff", "text": "#000000", "header_bg": "#f0f2f6", "sidebar": "#ffffff"},
-        "Dark": {"bg": "#0e1117", "text": "#ffffff", "header_bg": "#262730", "sidebar": "#1e1e1e"},
-        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "header_bg": "#e4dcc8", "sidebar": "#f4ecd8"}
-    }
-    colors = themes.get(theme, themes["Light"])
+    # Locked Sepia Colors
+    bg_color = "#f4ecd8"
+    text_color = "#000000" # Pure black for best reading
+    card_color = "#f4ecd8" # Same as background to prevent "boxes"
 
     st.markdown(f"""
         <style>
-        /* Force Global Brightness */
-        .stApp {{ background-color: {colors['bg']} !important; color: {colors['text']} !important; }}
-        
-        /* FIX QUESTION HEADERS (The main problem area) */
-        .streamlit-expanderHeader {{
-            background-color: {colors['header_bg']} !important;
-            color: {colors['text']} !important;
-            opacity: 1.0 !important;
-            border: 2px solid {colors['text']} !important;
+        /* Force Global Sepia Background */
+        .stApp {{ 
+            background-color: {bg_color} !important; 
         }}
         
-        /* Disable ALL hover-fading on headers */
-        .streamlit-expanderHeader:hover, .streamlit-expanderHeader:active, .streamlit-expanderHeader:focus {{
-            background-color: {colors['header_bg']} !important;
-            color: {colors['text']} !important;
-            opacity: 1.0 !important;
-        }}
-
-        /* Force all text inside expanders and on pages to be SOLID */
-        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p {{
+        /* Force ALL text to be Solid Black and No Fading */
+        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p, .stSelectbox p {{
             font-size: {f_size}px !important;
-            color: {colors['text']} !important;
+            color: {text_color} !important;
             opacity: 1.0 !important;
             filter: none !important;
+            transition: none !important;
         }}
 
-        /* Fix Sidebar & Selectboxes (Theme/Model dropdowns) */
-        div[data-testid="stSidebar"] {{ background-color: {colors['sidebar']} !important; }}
+        /* Fix Question Expanders - No Background Change */
+        .streamlit-expanderHeader {{
+            background-color: {bg_color} !important;
+            color: {text_color} !important;
+            border: none !important;
+            border-bottom: 1px solid #d3c6a6 !important;
+            opacity: 1.0 !important;
+        }}
+        
+        .streamlit-expanderHeader:hover, .streamlit-expanderHeader:active, .streamlit-expanderHeader:focus {{
+            background-color: {bg_color} !important;
+            color: {text_color} !important;
+            opacity: 1.0 !important;
+        }}
+
+        .stExpander {{
+            border: none !important;
+            background-color: {bg_color} !important;
+        }}
+
+        /* Sidebar & Widgets */
+        div[data-testid="stSidebar"] {{ background-color: #e4dcc8 !important; }}
         
         .stSelectbox div[data-baseweb="select"] > div {{
-            background-color: {colors['bg']} !important;
-            color: {colors['text']} !important;
-            border: 2px solid {colors['text']} !important;
+            background-color: #fdf6e3 !important;
+            color: {text_color} !important;
+            border: 1px solid {text_color} !important;
+        }}
+
+        /* Buttons Visibility */
+        .stButton>button, div[data-testid="stDownloadButton"]>button {{
+            background-color: #e4dcc8 !important;
+            color: {text_color} !important;
+            border: 1px solid {text_color} !important;
             opacity: 1.0 !important;
         }}
 
-        /* Fix Result Page Buttons */
-        .stButton>button, div[data-testid="stDownloadButton"]>button {{
-            background-color: {colors['header_bg']} !important;
-            color: {colors['text']} !important;
-            border: 2px solid {colors['text']} !important;
-            opacity: 1.0 !important;
+        /* Correct/Wrong Answer Highlights */
+        .stAlert {{
+            border-radius: 10px !important;
         }}
-        
-        /* Jump Navigation Colors */
-        a {{ color: #ff4b4b !important; text-decoration: underline !important; font-weight: bold !important; }}
         </style>
     """, unsafe_allow_html=True)
 
-# --- UI CONTROLS ---
+# --- FONT NAVIGATION ---
 def render_controls():
     c1, c2, c3 = st.columns([8, 1, 1])
     with c2:
-        if st.button("➖", key="font_down"): 
+        if st.button("➖"): 
             st.session_state.font_size = max(12, st.session_state.font_size - 2); st.rerun()
     with c3:
-        if st.button("➕", key="font_up"): 
-            st.session_state.font_size = min(44, st.session_state.font_size + 2); st.rerun()
+        if st.button("➕"): 
+            st.session_state.font_size = min(46, st.session_state.font_size + 2); st.rerun()
 
-# --- AI & DATA CORES ---
+# --- AI & CORE LOGIC ---
 @st.cache_data
 def get_working_models():
     try:
@@ -102,8 +109,8 @@ def get_working_models():
 
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
-    prompt = f"Act as a Medical Consultant. Create a {difficulty} quiz with {num} questions on {topic}. Output VALID JSON ONLY."
-    if previous_questions: prompt += f"\nAvoid these: {previous_questions[-20:]}"
+    prompt = f"Medical Quiz. Topic: {topic}. Difficulty: {difficulty}. Num: {num}. JSON ONLY."
+    if previous_questions: prompt += f"\nNo repeats: {previous_questions[-20:]}"
     content = [prompt]
     if input_type == "Text/PDF" and context_data: prompt += f"\nContext: {context_data[:10000]}..."; content = [prompt]
     elif input_type == "Image" and context_data: prompt += "\nAnalyze image."; content = [prompt, context_data]
@@ -116,14 +123,12 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
             timer.empty(); txt = response.text
             start, end = txt.find('['), txt.rfind(']') + 1
             return json.loads(txt[start:end])
-        except ResourceExhausted:
+        except:
             for t in range(20, 0, -1):
                 timer.warning(f"⚠️ Cooling down... {t}s"); time.sleep(1)
             timer.empty(); continue
-        except: return []
     return []
 
-# --- STORAGE ---
 def load_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -149,7 +154,7 @@ def create_report(topic, score, total, questions, answers):
         report += f"\n\nEXPLANATION: {q.get('explanation', 'N/A')}\nEXTRA EDGE: {q.get('extra_edge', 'N/A')}\n\n" + "="*50 + "\n\n" 
     return report
 
-# --- UI LOGIC ---
+# --- UI APP ---
 if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
@@ -158,7 +163,7 @@ if 'history' not in st.session_state: st.session_state.history = load_history()
 
 with st.sidebar:
     st.title("🩺 QUIZ MASTER")
-    theme_choice = st.selectbox("Theme", ["Light", "Dark", "Sepia (Tinted)"])
+    st.info("Mode: Permanent Sepia")
     model_choice = st.selectbox("AI Model", get_working_models())
     st.divider()
     if st.button("🏠 New Quiz"): st.session_state.page = "home"; st.rerun()
@@ -168,7 +173,7 @@ with st.sidebar:
             st.session_state.quiz_data, st.session_state.user_answers = item['data'], item.get('user_answers', {})
             st.session_state.current_index, st.session_state.page = 0, "scorecard"; st.rerun()
 
-apply_ui_theme(theme_choice)
+apply_sepia_theme()
 render_controls()
 
 if st.session_state.page == "home":
@@ -239,9 +244,8 @@ elif st.session_state.page == "scorecard":
     for i, q in enumerate(st.session_state.quiz_data):
         ans = st.session_state.user_answers.get(i)
         st.markdown(f"<div id='q{i+1}'></div>", unsafe_allow_html=True)
-        color = "green" if ans == q['correct_option'] else "red"
-        # --- NEW VISIBILITY LOGIC FOR EXPANDERS ---
-        with st.expander(f"Q{i+1} [{color.upper()}]: {q['question']}", expanded=False):
+        label = f"Q{i+1}: {q['question']}"
+        with st.expander(label, expanded=False):
             st.write(f"**Your Answer:** {ans} | **Correct:** {q['correct_option']}")
             for opt, txt in q['options'].items():
                 if opt == q['correct_option']: st.success(f"{opt}: {txt}")
