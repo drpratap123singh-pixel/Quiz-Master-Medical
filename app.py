@@ -19,77 +19,53 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- FIXED SEPIA & BLACK TEXT ENGINE ---
-if 'font_size' not in st.session_state: st.session_state.font_size = 22
+# --- PERMANENT DARK MODE & FONT ENGINE ---
+if 'font_size' not in st.session_state: st.session_state.font_size = 20
 
-def apply_sepia_theme():
+def apply_dark_theme():
     f_size = st.session_state.font_size
-    # Locked Sepia Colors
-    bg_color = "#f4ecd8"
-    text_color = "#000000" # Pure black for best reading
-    card_color = "#f4ecd8" # Same as background to prevent "boxes"
-
     st.markdown(f"""
         <style>
-        /* Force Global Sepia Background */
-        .stApp {{ 
-            background-color: {bg_color} !important; 
-        }}
+        /* Force Dark Background */
+        .stApp {{ background-color: #0e1117 !important; color: #ffffff !important; }}
         
-        /* Force ALL text to be Solid Black and No Fading */
-        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p, .stSelectbox p {{
+        /* Force Solid White Text - No Fading */
+        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p {{
             font-size: {f_size}px !important;
-            color: {text_color} !important;
+            color: #ffffff !important;
             opacity: 1.0 !important;
             filter: none !important;
-            transition: none !important;
-        }}
-
-        /* Fix Question Expanders - No Background Change */
-        .streamlit-expanderHeader {{
-            background-color: {bg_color} !important;
-            color: {text_color} !important;
-            border: none !important;
-            border-bottom: 1px solid #d3c6a6 !important;
-            opacity: 1.0 !important;
         }}
         
-        .streamlit-expanderHeader:hover, .streamlit-expanderHeader:active, .streamlit-expanderHeader:focus {{
-            background-color: {bg_color} !important;
-            color: {text_color} !important;
-            opacity: 1.0 !important;
-        }}
+        /* Sidebar Styling */
+        div[data-testid="stSidebar"] {{ background-color: #1e1e1e !important; }}
 
-        .stExpander {{
-            border: none !important;
-            background-color: {bg_color} !important;
-        }}
-
-        /* Sidebar & Widgets */
-        div[data-testid="stSidebar"] {{ background-color: #e4dcc8 !important; }}
-        
-        .stSelectbox div[data-baseweb="select"] > div {{
-            background-color: #fdf6e3 !important;
-            color: {text_color} !important;
-            border: 1px solid {text_color} !important;
-        }}
-
-        /* Buttons Visibility */
+        /* Buttons & Widgets Visibility */
         .stButton>button, div[data-testid="stDownloadButton"]>button {{
-            background-color: #e4dcc8 !important;
-            color: {text_color} !important;
-            border: 1px solid {text_color} !important;
+            background-color: #262730 !important;
+            color: #ffffff !important;
+            border: 1px solid #ffffff !important;
             opacity: 1.0 !important;
         }}
 
-        /* Correct/Wrong Answer Highlights */
-        .stAlert {{
-            border-radius: 10px !important;
+        /* Expander Headers */
+        .streamlit-expanderHeader {{
+            background-color: #262730 !important;
+            color: #ffffff !important;
+            border-bottom: 1px solid #ffffff !important;
+            opacity: 1.0 !important;
+        }}
+
+        /* Selectboxes (AI Model) */
+        .stSelectbox div[data-baseweb="select"] > div {{
+            background-color: #262730 !important;
+            color: #ffffff !important;
+            border: 1px solid #ffffff !important;
         }}
         </style>
     """, unsafe_allow_html=True)
 
-# --- FONT NAVIGATION ---
+# --- TOP BAR FONT CONTROLS ---
 def render_controls():
     c1, c2, c3 = st.columns([8, 1, 1])
     with c2:
@@ -99,7 +75,7 @@ def render_controls():
         if st.button("➕"): 
             st.session_state.font_size = min(46, st.session_state.font_size + 2); st.rerun()
 
-# --- AI & CORE LOGIC ---
+# --- AI & DATA CORES ---
 @st.cache_data
 def get_working_models():
     try:
@@ -163,7 +139,6 @@ if 'history' not in st.session_state: st.session_state.history = load_history()
 
 with st.sidebar:
     st.title("🩺 QUIZ MASTER")
-    st.info("Mode: Permanent Sepia")
     model_choice = st.selectbox("AI Model", get_working_models())
     st.divider()
     if st.button("🏠 New Quiz"): st.session_state.page = "home"; st.rerun()
@@ -173,7 +148,7 @@ with st.sidebar:
             st.session_state.quiz_data, st.session_state.user_answers = item['data'], item.get('user_answers', {})
             st.session_state.current_index, st.session_state.page = 0, "scorecard"; st.rerun()
 
-apply_sepia_theme()
+apply_dark_theme()
 render_controls()
 
 if st.session_state.page == "home":
