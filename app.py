@@ -19,67 +19,59 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- ULTIMATE VISIBILITY ENGINE (FORCED NO-FADE) ---
+# --- NO-FADE CSS ENGINE ---
 if 'font_size' not in st.session_state: st.session_state.font_size = 20
 
 def apply_ui_theme(theme):
     f_size = st.session_state.font_size
     themes = {
-        "Light": {"bg": "#ffffff", "text": "#000000", "card": "#ffffff", "border": "#000000", "sidebar": "#f0f2f6"},
-        "Dark": {"bg": "#0e1117", "text": "#ffffff", "card": "#262730", "border": "#ffffff", "sidebar": "#1e1e1e"},
-        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "card": "#fdf6e3", "border": "#433422", "sidebar": "#e4dcc8"}
+        "Light": {"bg": "#ffffff", "text": "#000000", "card": "#f0f2f6", "border": "#000000"},
+        "Dark": {"bg": "#0e1117", "text": "#ffffff", "card": "#262730", "border": "#ffffff"},
+        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "card": "#e4dcc8", "border": "#433422"}
     }
     colors = themes.get(theme, themes["Light"])
 
-    # THIS CSS TARGETS EVERY SPECIFIC ELEMENT THAT WAS "GHOSTING"
     st.markdown(f"""
         <style>
-        /* Global Reset */
         .stApp {{ background-color: {colors['bg']} !important; color: {colors['text']} !important; }}
         
-        /* Force Text Brighter (Headers, Radio, Paragraphs) */
+        /* Force ALL text components to 100% opacity and specific color */
         p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p {{
             font-size: {f_size}px !important;
             color: {colors['text']} !important;
             opacity: 1.0 !important;
+            filter: none !important;
+            transition: none !important;
         }}
 
-        /* FIX SIDEBAR DROPDOWNS (Theme & AI Model) */
-        div[data-testid="stSidebar"] {{
-            background-color: {colors['sidebar']} !important;
-        }}
-        
-        .stSelectbox div[data-baseweb="select"] > div {{
-            background-color: {colors['card']} !important;
-            color: {colors['text']} !important;
-            border: 2px solid {colors['border']} !important;
-            opacity: 1.0 !important;
-        }}
-
-        /* FIX BUTTONS (Download Result, Home, Add 10 More) */
-        .stButton>button, div[data-testid="stDownloadButton"]>button {{
-            background-color: {colors['card']} !important;
-            color: {colors['text']} !important;
-            border: 2px solid {colors['border']} !important;
-            font-size: {f_size}px !important;
-            opacity: 1.0 !important;
-            width: 100% !important;
-        }}
-
-        /* FIX EXPANDERS (Question Headers & Content) */
+        /* STRIP HOVER EFFECTS FROM EXPANDERS (The Question Headers) */
         .streamlit-expanderHeader {{
             background-color: {colors['card']} !important;
             color: {colors['text']} !important;
             opacity: 1.0 !important;
         }}
         
+        .streamlit-expanderHeader:hover, .streamlit-expanderHeader:focus, .streamlit-expanderHeader:active {{
+            background-color: {colors['card']} !important;
+            color: {colors['text']} !important;
+            opacity: 1.0 !important;
+        }}
+
         .stExpander {{
             border: 2px solid {colors['border']} !important;
             background-color: {colors['card']} !important;
             opacity: 1.0 !important;
         }}
 
-        /* Fix Radio Button Hover Fade */
+        /* Sidebar dropdowns and buttons visibility */
+        .stSelectbox div[data-baseweb="select"] > div, .stButton>button, div[data-testid="stDownloadButton"]>button {{
+            background-color: {colors['card']} !important;
+            color: {colors['text']} !important;
+            border: 2px solid {colors['border']} !important;
+            opacity: 1.0 !important;
+        }}
+
+        /* Radio buttons (Options) focus fix */
         div[data-testid="stMarkdownContainer"] p {{
             color: {colors['text']} !important;
             opacity: 1.0 !important;
@@ -91,22 +83,17 @@ def apply_ui_theme(theme):
 def render_controls():
     c1, c2, c3 = st.columns([8, 1, 1])
     with c2:
-        if st.button("➖", key="font_dec"): 
-            st.session_state.font_size = max(12, st.session_state.font_size - 2)
-            st.rerun()
+        if st.button("➖", key="f_dec"): 
+            st.session_state.font_size = max(12, st.session_state.font_size - 2); st.rerun()
     with c3:
-        if st.button("➕", key="font_inc"): 
-            st.session_state.font_size = min(40, st.session_state.font_size + 2)
-            st.rerun()
+        if st.button("➕", key="f_inc"): 
+            st.session_state.font_size = min(40, st.session_state.font_size + 2); st.rerun()
 
 # --- AI CORE ---
 @st.cache_data
 def get_working_models():
     try:
-        valid = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                valid.append(m.name)
+        valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         valid.sort(key=lambda x: "flash" not in x)
         return valid
     except: return ["models/gemini-1.5-flash", "models/gemini-pro"]
@@ -117,8 +104,7 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     if previous_questions: prompt += f"\nAvoid these: {previous_questions[-20:]}"
     content = [prompt]
     if input_type == "Text/PDF" and context_data:
-        prompt += f"\nContext: {context_data[:10000]}..."
-        content = [prompt]
+        prompt += f"\nContext: {context_data[:10000]}..."; content = [prompt]
     elif input_type == "Image" and context_data:
         prompt += "\nAnalyze image."; content = [prompt, context_data]
     prompt += "\nFormat: [{\"question\":\"...\", \"options\":{\"A\":\"..\",\"B\":\"..\",\"C\":\"..\",\"D\":\"..\"}, \"correct_option\":\"A\", \"explanation\":\"...\", \"extra_edge\":\"...\"}]"
@@ -127,8 +113,7 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     for attempt in range(max_retries):
         try:
             response = model.generate_content(content if input_type=="Image" else [prompt])
-            timer.empty()
-            txt = response.text
+            timer.empty(); txt = response.text
             start, end = txt.find('['), txt.rfind(']') + 1
             return json.loads(txt[start:end])
         except ResourceExhausted:
@@ -138,7 +123,7 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         except: return []
     return []
 
-# --- HISTORY ENGINE ---
+# --- STORAGE ---
 def load_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -166,7 +151,7 @@ def create_report(topic, score, total, questions, answers):
         report += "="*50 + "\n\n" 
     return report
 
-# --- APP NAVIGATION ---
+# --- UI LOGIC ---
 if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
@@ -178,10 +163,10 @@ with st.sidebar:
     theme_choice = st.selectbox("Theme", ["Light", "Dark", "Sepia (Tinted)"])
     model_choice = st.selectbox("AI Model", get_working_models())
     st.divider()
-    if st.button("🏠 New Quiz", key="new_quiz_btn"): st.session_state.page = "home"; st.rerun()
+    if st.button("🏠 New Quiz"): st.session_state.page = "home"; st.rerun()
     st.subheader("📜 Recent History")
     for i, item in enumerate(st.session_state.history):
-        if st.button(f"{item['topic']} ({item['score']})", key=f"hist_{i}"):
+        if st.button(f"{item['topic']} ({item['score']})", key=f"h_{i}"):
             st.session_state.quiz_data, st.session_state.user_answers = item['data'], item.get('user_answers', {})
             st.session_state.current_index, st.session_state.page = 0, "scorecard"; st.rerun()
 
@@ -196,9 +181,7 @@ if st.session_state.page == "home":
     elif method == "Paste Text": topic = st.text_input("Topic Name"); ctx = st.text_area("Content")
     elif method == "Upload PDF":
         topic = st.text_input("Topic Name"); f = st.file_uploader("PDF", type='pdf')
-        if f: 
-            reader = PyPDF2.PdfReader(f)
-            ctx = "".join([p.extract_text() for p in reader.pages])
+        if f: reader = PyPDF2.PdfReader(f); ctx = "".join([p.extract_text() for p in reader.pages])
     elif method == "Upload Image":
         topic = st.text_input("Topic Name"); f = st.file_uploader("Image", type=['png','jpg','jpeg'])
         if f: img = Image.open(f); st.image(img, width=200)
