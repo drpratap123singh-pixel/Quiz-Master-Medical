@@ -8,13 +8,10 @@ import time
 from PIL import Image
 import PyPDF2
 
-# --- CONFIGURATION (THE PERMANENT FIX) ---
+# --- CONFIGURATION ---
 try:
-    # This grabs the key from the "Safe" (Streamlit Cloud Secrets)
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    # This is a placeholder. DO NOT PASTE YOUR REAL KEY HERE FOR GITHUB.
-    # Only paste your key here if you are running on your LAPTOP manually.
     api_key = "PASTE_YOUR_KEY_HERE_ONLY_FOR_LOCAL"
 
 genai.configure(api_key=api_key)
@@ -23,6 +20,72 @@ genai.configure(api_key=api_key)
 HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
+
+# --- CUSTOM CSS FOR THEMES & FONTS ---
+def apply_custom_styles(theme, font_size):
+    # Font Sizes Map
+    size_map = {
+        "Small": "16px",
+        "Medium": "18px", 
+        "Large": "20px", 
+        "Extra Large": "22px",
+        "Huge": "24px"
+    }
+    f_size = size_map.get(font_size, "18px")
+
+    # Theme Colors
+    themes = {
+        "Light": {
+            "bg": "#ffffff",
+            "text": "#000000",
+            "card": "#f0f2f6"
+        },
+        "Dark": {
+            "bg": "#0e1117",
+            "text": "#fafafa",
+            "card": "#262730"
+        },
+        "Sepia (Tinted)": {
+            "bg": "#f4ecd8", # Warm paper color
+            "text": "#5b4636", # Dark brown text
+            "card": "#e4dcc8"
+        }
+    }
+    
+    colors = themes.get(theme, themes["Light"])
+
+    # Inject CSS
+    st.markdown(f"""
+        <style>
+        /* Main Background */
+        .stApp {{
+            background-color: {colors['bg']};
+            color: {colors['text']};
+        }}
+        
+        /* Text Elements */
+        p, div, label, span, h1, h2, h3, h4, h5, h6, .stMarkdown {{
+            font-size: {f_size} !important;
+            color: {colors['text']} !important;
+        }}
+        
+        /* Expander/Card Backgrounds */
+        .streamlit-expanderHeader {{
+            background-color: {colors['card']} !important;
+            color: {colors['text']} !important;
+        }}
+        
+        div[data-testid="stExpander"] {{
+            border: 1px solid {colors['text']};
+            border-radius: 5px;
+        }}
+        
+        /* Input Fields */
+        .stTextInput, .stTextArea {{
+            font-size: {f_size} !important;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
 
 # --- 1. AUTO-DETECT WORKING MODELS ---
 @st.cache_data
@@ -60,17 +123,32 @@ def save_quiz_to_history(topic, score, total, questions, user_answers):
     except: pass
     return history
 
-# --- REPORT GENERATOR ---
+# --- REPORT GENERATOR (IMPROVED SPACING) ---
 def create_text_report(topic, score, total, questions, user_answers):
     report = f"🎓 QUIZ MASTER REPORT\nTopic: {topic}\n"
     report += f"Score: {score}/{total}\n" + "="*50 + "\n\n"
+    
     for i, q in enumerate(questions):
         ans = user_answers.get(i) or user_answers.get(str(i))
         correct = q['correct_option']
-        status = "✅ CORRECT" if ans == correct else f"❌ WRONG (Chose {ans})"
-        report += f"Q{i+1}: {q['question']}\n{status}\n"
-        report += f"Explanation: {q.get('explanation', 'N/A')}\n"
-        report += f"High Yield: {q.get('extra_edge', 'N/A')}\n" + "-"*50 + "\n"
+        status = "✅ CORRECT" if ans == correct else f"❌ WRONG (Your Choice: {ans})"
+        
+        report += f"Q{i+1}: {q['question']}\n"
+        report += f"STATUS: {status}\n"
+        report += f"-"*20 + "\n" # Divider within question
+        
+        # Add Options
+        for opt, txt in q['options'].items():
+            marker = "   "
+            if opt == correct: marker = "-> "
+            report += f"{marker}{opt}: {txt}\n"
+            
+        report += f"\nEXPLANATION:\n{q.get('explanation', 'N/A')}\n"
+        report += f"\nEXTRA EDGE:\n{q.get('extra_edge', 'N/A')}\n"
+        
+        # DOUBLE GAP between questions for better readability
+        report += "\n" + "="*50 + "\n\n" 
+        
     return report
 
 # --- PDF EXTRACTOR ---
@@ -158,16 +236,28 @@ if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
 if 'current_index' not in st.session_state: st.session_state.current_index = 0
-
 if 'history' not in st.session_state: st.session_state.history = load_history()
 
+# Session Variables
 for key in ['current_topic', 'current_context', 'current_input_type', 'current_difficulty', 'current_model']:
     if key not in st.session_state: st.session_state[key] = None
 
+# --- SIDEBAR (SETTINGS) ---
 with st.sidebar:
     st.title("🩺 QUIZ MASTER")
+    
+    # --- APPEARANCE SETTINGS ---
+    with st.expander("🎨 Appearance Settings", expanded=True):
+        theme_choice = st.selectbox("Theme", ["Light", "Dark", "Sepia (Tinted)"])
+        font_choice = st.select_slider("Font Size", ["Small", "Medium", "Large", "Extra Large", "Huge"], value="Medium")
+    
+    # APPLY STYLES
+    apply_custom_styles(theme_choice, font_choice)
+    # ---------------------------
+
     models = get_working_models()
-    model_choice = st.selectbox("Model", models) if models else "models/gemini-1.5-flash"
+    model_choice = st.selectbox("AI Model", models) if models else "models/gemini-1.5-flash"
+    
     st.divider()
     if st.button("🏠 New Quiz"):
         st.session_state.page = "home"
@@ -184,6 +274,7 @@ with st.sidebar:
                 st.session_state.page = "scorecard" 
                 st.rerun()
 
+# --- PAGE LOGIC ---
 if st.session_state.page == "home":
     st.title("🚀 Generate Quiz")
     method = st.radio("Source", ["Gemini Knowledge", "Paste Text", "Upload PDF", "Upload Image"], horizontal=True)
@@ -275,25 +366,19 @@ elif st.session_state.page == "scorecard":
         st.session_state.saved = True
         st.rerun()
 
-    # --- TOP DASHBOARD (HIGH VISIBILITY) ---
+    # --- TOP DASHBOARD ---
     correct_indices = []
     wrong_indices = []
-    
     for i, q in enumerate(st.session_state.quiz_data):
         ans = st.session_state.user_answers.get(i)
-        if ans == q['correct_option']:
-            correct_indices.append(str(i + 1))
-        else:
-            wrong_indices.append(str(i + 1))
+        if ans == q['correct_option']: correct_indices.append(str(i + 1))
+        else: wrong_indices.append(str(i + 1))
             
     d1, d2 = st.columns(2)
-    with d1:
-        st.error(f"❌ **Mistakes ({len(wrong_indices)}):**\n\n" + ", ".join(wrong_indices) if wrong_indices else "None! 🎉")
-    with d2:
-        st.success(f"✅ **Correct ({len(correct_indices)}):**\n\n" + ", ".join(correct_indices) if correct_indices else "None")
-    
+    with d1: st.error(f"❌ **Mistakes ({len(wrong_indices)}):**\n\n" + ", ".join(wrong_indices) if wrong_indices else "None! 🎉")
+    with d2: st.success(f"✅ **Correct ({len(correct_indices)}):**\n\n" + ", ".join(correct_indices) if correct_indices else "None")
     st.divider()
-    # ----------------------------------------
+    # ---------------------
     
     c1, c2 = st.columns(2)
     report = create_text_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
