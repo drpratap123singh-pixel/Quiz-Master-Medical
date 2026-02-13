@@ -19,84 +19,96 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- VISIBILITY ENGINE (TOTAL BRIGHTNESS FIX) ---
+# --- ULTIMATE VISIBILITY ENGINE (FORCED NO-FADE) ---
 if 'font_size' not in st.session_state: st.session_state.font_size = 20
 
 def apply_ui_theme(theme):
     f_size = st.session_state.font_size
     themes = {
-        "Light": {"bg": "#ffffff", "text": "#000000", "card": "#ffffff", "border": "#000000"},
-        "Dark": {"bg": "#0e1117", "text": "#ffffff", "card": "#262730", "border": "#ffffff"},
-        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "card": "#fdf6e3", "border": "#433422"}
+        "Light": {"bg": "#ffffff", "text": "#000000", "card": "#ffffff", "border": "#000000", "sidebar": "#f0f2f6"},
+        "Dark": {"bg": "#0e1117", "text": "#ffffff", "card": "#262730", "border": "#ffffff", "sidebar": "#1e1e1e"},
+        "Sepia (Tinted)": {"bg": "#f4ecd8", "text": "#433422", "card": "#fdf6e3", "border": "#433422", "sidebar": "#e4dcc8"}
     }
     colors = themes.get(theme, themes["Light"])
 
-    # THIS CSS OVERRIDES ALL FADING AND DARK OVERLAYS
+    # THIS CSS TARGETS EVERY SPECIFIC ELEMENT THAT WAS "GHOSTING"
     st.markdown(f"""
         <style>
-        /* Base App Overrides */
+        /* Global Reset */
         .stApp {{ background-color: {colors['bg']} !important; color: {colors['text']} !important; }}
         
-        /* FORCE ALL TEXT TO BE SOLID COLOR - NO FADING */
+        /* Force Text Brighter (Headers, Radio, Paragraphs) */
         p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p {{
             font-size: {f_size}px !important;
             color: {colors['text']} !important;
             opacity: 1.0 !important;
-            filter: none !important;
+        }}
+
+        /* FIX SIDEBAR DROPDOWNS (Theme & AI Model) */
+        div[data-testid="stSidebar"] {{
+            background-color: {colors['sidebar']} !important;
         }}
         
-        /* Fix buttons showing up as dark boxes */
-        .stButton>button {{
+        .stSelectbox div[data-baseweb="select"] > div {{
+            background-color: {colors['card']} !important;
+            color: {colors['text']} !important;
+            border: 2px solid {colors['border']} !important;
+            opacity: 1.0 !important;
+        }}
+
+        /* FIX BUTTONS (Download Result, Home, Add 10 More) */
+        .stButton>button, div[data-testid="stDownloadButton"]>button {{
             background-color: {colors['card']} !important;
             color: {colors['text']} !important;
             border: 2px solid {colors['border']} !important;
             font-size: {f_size}px !important;
             opacity: 1.0 !important;
+            width: 100% !important;
         }}
 
-        /* Fix Expander (Review Questions) fading out */
-        .streamlit-expanderHeader, .stExpander {{
+        /* FIX EXPANDERS (Question Headers & Content) */
+        .streamlit-expanderHeader {{
             background-color: {colors['card']} !important;
             color: {colors['text']} !important;
-            border: 2px solid {colors['border']} !important;
             opacity: 1.0 !important;
         }}
         
-        /* Ensure Radio buttons (Options) are bright */
+        .stExpander {{
+            border: 2px solid {colors['border']} !important;
+            background-color: {colors['card']} !important;
+            opacity: 1.0 !important;
+        }}
+
+        /* Fix Radio Button Hover Fade */
         div[data-testid="stMarkdownContainer"] p {{
             color: {colors['text']} !important;
             opacity: 1.0 !important;
         }}
-        
-        /* Make the Progress Bar visible */
-        .stProgress > div > div > div > div {{
-            background-color: #ff4b4b !important;
-        }}
         </style>
     """, unsafe_allow_html=True)
 
-# --- FONT & NAVIGATION BAR ---
+# --- TOP BAR CONTROLS ---
 def render_controls():
     c1, c2, c3 = st.columns([8, 1, 1])
     with c2:
-        if st.button("➖"): 
+        if st.button("➖", key="font_dec"): 
             st.session_state.font_size = max(12, st.session_state.font_size - 2)
             st.rerun()
     with c3:
-        if st.button("➕"): 
+        if st.button("➕", key="font_inc"): 
             st.session_state.font_size = min(40, st.session_state.font_size + 2)
             st.rerun()
 
-# --- 1. AI ENGINE ---
+# --- AI CORE ---
 @st.cache_data
 def get_working_models():
     try:
-        valid_models = []
+        valid = []
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                valid_models.append(m.name)
-        valid_models.sort(key=lambda x: "flash" not in x)
-        return valid_models
+                valid.append(m.name)
+        valid.sort(key=lambda x: "flash" not in x)
+        return valid
     except: return ["models/gemini-1.5-flash", "models/gemini-pro"]
 
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
@@ -111,22 +123,22 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         prompt += "\nAnalyze image."; content = [prompt, context_data]
     prompt += "\nFormat: [{\"question\":\"...\", \"options\":{\"A\":\"..\",\"B\":\"..\",\"C\":\"..\",\"D\":\"..\"}, \"correct_option\":\"A\", \"explanation\":\"...\", \"extra_edge\":\"...\"}]"
     
-    max_retries, timer_placeholder = 3, st.empty()
+    max_retries, timer = 3, st.empty()
     for attempt in range(max_retries):
         try:
             response = model.generate_content(content if input_type=="Image" else [prompt])
-            timer_placeholder.empty()
+            timer.empty()
             txt = response.text
             start, end = txt.find('['), txt.rfind(']') + 1
             return json.loads(txt[start:end])
         except ResourceExhausted:
             for t in range(20, 0, -1):
-                timer_placeholder.warning(f"⚠️ Cooling down... {t}s"); time.sleep(1)
-            timer_placeholder.empty(); continue
+                timer.warning(f"⚠️ Cooling down... {t}s"); time.sleep(1)
+            timer.empty(); continue
         except: return []
     return []
 
-# --- DATA MANAGER ---
+# --- HISTORY ENGINE ---
 def load_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -134,19 +146,19 @@ def load_history():
         except: return []
     return []
 
-def save_quiz_to_history(topic, score, total, questions, user_answers):
+def save_quiz(topic, score, total, questions, answers):
     history = load_history()
-    entry = {"date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "topic": topic, "score": f"{score}/{total}", "data": questions, "user_answers": user_answers}
-    history.insert(0, entry) 
+    entry = {"date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "topic": topic, "score": f"{score}/{total}", "data": questions, "user_answers": answers}
+    history.insert(0, entry)
     try:
         with open(HISTORY_FILE, "w") as f: json.dump(history, f)
     except: pass
     return history
 
-def create_text_report(topic, score, total, questions, user_answers):
+def create_report(topic, score, total, questions, answers):
     report = f"🎓 QUIZ MASTER REPORT\nTopic: {topic}\nScore: {score}/{total}\n" + "="*50 + "\n\n"
     for i, q in enumerate(questions):
-        ans = user_answers.get(i) or user_answers.get(str(i))
+        ans = answers.get(i) or answers.get(str(i))
         correct = q['correct_option']
         report += f"Q{i+1}: {q['question']}\nSTATUS: {'✅ CORRECT' if ans == correct else f'❌ WRONG (Chose {ans})'}\n"
         report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==correct else '  '} {k}: {v}" for k,v in q['options'].items()])
@@ -154,7 +166,7 @@ def create_text_report(topic, score, total, questions, user_answers):
         report += "="*50 + "\n\n" 
     return report
 
-# --- APP UI LOGIC ---
+# --- APP NAVIGATION ---
 if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
@@ -164,10 +176,9 @@ if 'history' not in st.session_state: st.session_state.history = load_history()
 with st.sidebar:
     st.title("🩺 QUIZ MASTER")
     theme_choice = st.selectbox("Theme", ["Light", "Dark", "Sepia (Tinted)"])
-    models = get_working_models()
-    model_choice = st.selectbox("AI Model", models)
+    model_choice = st.selectbox("AI Model", get_working_models())
     st.divider()
-    if st.button("🏠 New Quiz"): st.session_state.page = "home"; st.rerun()
+    if st.button("🏠 New Quiz", key="new_quiz_btn"): st.session_state.page = "home"; st.rerun()
     st.subheader("📜 Recent History")
     for i, item in enumerate(st.session_state.history):
         if st.button(f"{item['topic']} ({item['score']})", key=f"hist_{i}"):
@@ -220,9 +231,8 @@ elif st.session_state.page == "scorecard":
     score = sum([1 for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)==q['correct_option']])
     st.title(f"Score: {score}/{len(st.session_state.quiz_data)}")
     if 'saved' not in st.session_state:
-        st.session_state.history, st.session_state.saved = save_quiz_to_history(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers), True; st.rerun()
+        st.session_state.history, st.session_state.saved = save_quiz(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers), True; st.rerun()
     
-    # JUMP NAVIGATION
     wrongs = [str(i+1) for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)!=q['correct_option']]
     rights = [str(i+1) for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)==q['correct_option']]
     j1, j2 = st.columns(2)
@@ -237,7 +247,7 @@ elif st.session_state.page == "scorecard":
     col1, col2, col3 = st.columns(3)
     if col1.button("🏠 Home"): st.session_state.page = "home"; del st.session_state['saved']; st.rerun()
     with col2:
-        report = create_text_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
+        report = create_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
         st.download_button("📥 Download Result", report, f"Quiz_{st.session_state.current_topic}.txt")
     if col3.button("🔄 Add 10 More"):
         with st.spinner("Adding..."):
@@ -247,7 +257,7 @@ elif st.session_state.page == "scorecard":
 
     for i, q in enumerate(st.session_state.quiz_data):
         ans = st.session_state.user_answers.get(i)
-        st.markdown(f"<div id='q{i+1}'></div>", unsafe_allow_html=True) # Anchor for jumping
+        st.markdown(f"<div id='q{i+1}'></div>", unsafe_allow_html=True)
         color = "green" if ans == q['correct_option'] else "red"
         with st.expander(f"Q{i+1} [{color.upper()}]: {q['question']}", expanded=False):
             st.write(f"**Your Answer:** {ans} | **Correct:** {q['correct_option']}")
