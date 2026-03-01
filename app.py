@@ -19,17 +19,15 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- UI ENGINE: BULLETPROOF WHITE THEME (From Exam Simulator) ---
+# --- UI ENGINE: BULLETPROOF WHITE THEME ---
 if 'font_size' not in st.session_state: st.session_state.font_size = 20
 
 def apply_quiz_ui():
     f_size = st.session_state.font_size
     st.markdown(f"""
         <style>
-        /* 1. FORCE MAIN BACKGROUND WHITE */
         .stApp {{ background-color: #ffffff !important; color: #000000 !important; }}
         
-        /* 2. FORCE TEXT BLACK & VISIBLE */
         p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, li {{
             font-size: {f_size}px !important;
             color: #000000 !important;
@@ -38,14 +36,12 @@ def apply_quiz_ui():
             transition: none !important;
         }}
 
-        /* 3. WHITE INPUT BOXES & TEXT AREAS */
         .stTextInput input, .stTextArea textarea {{
             background-color: #ffffff !important;
             color: #000000 !important;
             border: 1px solid #000000 !important;
         }}
         
-        /* Dropdowns */
         div[data-baseweb="select"] > div {{
             background-color: #ffffff !important;
             color: #000000 !important;
@@ -54,13 +50,11 @@ def apply_quiz_ui():
         ul[data-baseweb="menu"] {{ background-color: #ffffff !important; }}
         li[data-baseweb="option"] {{ color: #000000 !important; }}
 
-        /* 4. SIDEBAR */
         [data-testid="stSidebar"] {{
             background-color: #f8f9fa !important;
             border-right: 1px solid #cccccc !important;
         }}
 
-        /* 5. EXPANDERS (For Scorecard) */
         .streamlit-expanderHeader {{
             background-color: #f0f2f6 !important;
             color: #000000 !important;
@@ -77,7 +71,6 @@ def apply_quiz_ui():
             border: 1px solid #000000 !important;
         }}
 
-        /* 6. BUTTONS */
         .stButton>button, div[data-testid="stDownloadButton"]>button {{
             background-color: #ffffff !important;
             color: #000000 !important;
@@ -85,7 +78,6 @@ def apply_quiz_ui():
             font-weight: bold !important;
         }}
         
-        /* History Sidebar Buttons */
         [data-testid="stSidebar"] button {{
             text-align: left !important;
             border: none !important;
@@ -180,7 +172,6 @@ with st.sidebar:
     if st.button("🏠 New Quiz"): st.session_state.page = "home"; st.rerun()
     st.subheader("📜 Recent History")
     
-    # --- FIXED: AttributeError & IndentationError resolved below ---
     for i, item in enumerate(st.session_state.history):
         if st.button(f"{item['topic']} ({item['score']})", key=f"h_{i}"):
             st.session_state.quiz_data = item['data']
@@ -281,10 +272,20 @@ elif st.session_state.page == "scorecard":
     with col2:
         report = create_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
         st.download_button("📥 Download Result", report, f"Quiz_{st.session_state.current_topic}.txt")
+    
+    # --- FIXED: ADD 10 MORE BUTTON ---
     if col3.button("🔄 Add 10 More"):
         with st.spinner("Adding..."):
             exist = [q['question'] for q in st.session_state.quiz_data]
-            new_data = generate_quiz(st.session_state.current_model, st.session_state.current_topic, 10, st.session_state.current_difficulty, st.session_state.current_input_type, st.session_state.current_context, exist)
+            
+            # Use safe fallbacks if the user loaded this from history where settings weren't saved
+            c_model = st.session_state.get('current_model', get_working_models()[0])
+            c_diff = st.session_state.get('current_difficulty', "Medium")
+            c_type = st.session_state.get('current_input_type', "Topic")
+            c_ctx = st.session_state.get('current_context', None)
+            
+            new_data = generate_quiz(c_model, st.session_state.current_topic, 10, c_diff, c_type, c_ctx, exist)
+            
             if new_data: 
                 st.session_state.quiz_data.extend(new_data)
                 del st.session_state['saved']
