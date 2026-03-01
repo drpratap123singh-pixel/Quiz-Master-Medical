@@ -145,8 +145,13 @@ with st.sidebar:
     st.subheader("📜 Recent History")
     for i, item in enumerate(st.session_state.history):
         if st.button(f"{item['topic']} ({item['score']})", key=f"h_{i}"):
-            st.session_state.quiz_data, st.session_state.user_answers = item['data'], item.get('user_answers', {})
-            st.session_state.current_index, st.session_state.page = 0, "scorecard"; st.rerun()
+           st.session_state.quiz_data = item['data']
+            st.session_state.user_answers = item.get('user_answers', {})
+            st.session_state.current_topic = item['topic'] 
+            st.session_state.saved = True 
+            st.session_state.current_index = 0
+            st.session_state.page = "scorecard"
+            st.rerun()
 
 apply_dark_theme()
 render_controls()
@@ -227,3 +232,4 @@ elif st.session_state.page == "scorecard":
                 elif opt == ans: st.error(f"{opt}: {txt}")
                 else: st.write(f"{opt}: {txt}")
             st.info(f"**Explanation:** {q['explanation']}"); st.warning(f"**Extra Edge:** {q['extra_edge']}")
+
