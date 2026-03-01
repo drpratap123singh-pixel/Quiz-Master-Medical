@@ -19,53 +19,82 @@ HISTORY_FILE = "quiz_history.json"
 
 st.set_page_config(page_title="QUIZ MASTER PRO", layout="wide", page_icon="🩺")
 
-# --- PERMANENT DARK MODE & FONT ENGINE ---
+# --- UI ENGINE: BULLETPROOF WHITE THEME (From Exam Simulator) ---
 if 'font_size' not in st.session_state: st.session_state.font_size = 20
 
-def apply_dark_theme():
+def apply_quiz_ui():
     f_size = st.session_state.font_size
     st.markdown(f"""
         <style>
-        /* Force Dark Background */
-        .stApp {{ background-color: #0e1117 !important; color: #ffffff !important; }}
+        /* 1. FORCE MAIN BACKGROUND WHITE */
+        .stApp {{ background-color: #ffffff !important; color: #000000 !important; }}
         
-        /* Force Solid White Text - No Fading */
-        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, .stButton p, .stExpander p {{
+        /* 2. FORCE TEXT BLACK & VISIBLE */
+        p, div, label, span, h1, h2, h3, h4, .stMarkdown, .stRadio label, li {{
             font-size: {f_size}px !important;
-            color: #ffffff !important;
+            color: #000000 !important;
             opacity: 1.0 !important;
             filter: none !important;
+            transition: none !important;
+        }}
+
+        /* 3. WHITE INPUT BOXES & TEXT AREAS */
+        .stTextInput input, .stTextArea textarea {{
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 1px solid #000000 !important;
         }}
         
-        /* Sidebar Styling */
-        div[data-testid="stSidebar"] {{ background-color: #1e1e1e !important; }}
+        /* Dropdowns */
+        div[data-baseweb="select"] > div {{
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 1px solid #000000 !important;
+        }}
+        ul[data-baseweb="menu"] {{ background-color: #ffffff !important; }}
+        li[data-baseweb="option"] {{ color: #000000 !important; }}
 
-        /* Buttons & Widgets Visibility */
-        .stButton>button, div[data-testid="stDownloadButton"]>button {{
-            background-color: #262730 !important;
-            color: #ffffff !important;
-            border: 1px solid #ffffff !important;
-            opacity: 1.0 !important;
+        /* 4. SIDEBAR */
+        [data-testid="stSidebar"] {{
+            background-color: #f8f9fa !important;
+            border-right: 1px solid #cccccc !important;
         }}
 
-        /* Expander Headers */
+        /* 5. EXPANDERS (For Scorecard) */
         .streamlit-expanderHeader {{
-            background-color: #262730 !important;
-            color: #ffffff !important;
-            border-bottom: 1px solid #ffffff !important;
+            background-color: #f0f2f6 !important;
+            color: #000000 !important;
+            border: 1px solid #000000 !important;
             opacity: 1.0 !important;
         }}
+        .streamlit-expanderHeader:hover, .streamlit-expanderHeader:active, .streamlit-expanderHeader:focus {{
+            background-color: #f0f2f6 !important;
+            color: #000000 !important;
+            opacity: 1.0 !important;
+        }}
+        .stExpander {{
+            background-color: #ffffff !important;
+            border: 1px solid #000000 !important;
+        }}
 
-        /* Selectboxes (AI Model) */
-        .stSelectbox div[data-baseweb="select"] > div {{
-            background-color: #262730 !important;
-            color: #ffffff !important;
-            border: 1px solid #ffffff !important;
+        /* 6. BUTTONS */
+        .stButton>button, div[data-testid="stDownloadButton"]>button {{
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 1px solid #000000 !important;
+            font-weight: bold !important;
+        }}
+        
+        /* History Sidebar Buttons */
+        [data-testid="stSidebar"] button {{
+            text-align: left !important;
+            border: none !important;
+            background: transparent !important;
         }}
         </style>
     """, unsafe_allow_html=True)
 
-# --- TOP BAR FONT CONTROLS ---
+# --- TOP BAR CONTROLS ---
 def render_controls():
     c1, c2, c3 = st.columns([8, 1, 1])
     with c2:
@@ -75,21 +104,24 @@ def render_controls():
         if st.button("➕"): 
             st.session_state.font_size = min(46, st.session_state.font_size + 2); st.rerun()
 
-# --- AI & DATA CORES ---
+# --- AI CORE ---
 @st.cache_data
 def get_working_models():
     try:
         valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        valid.sort(key=lambda x: "flash" not in x); return valid
+        valid.sort(key=lambda x: "flash" not in x)
+        return valid
     except: return ["models/gemini-1.5-flash", "models/gemini-pro"]
 
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
-    prompt = f"Medical Quiz. Topic: {topic}. Difficulty: {difficulty}. Num: {num}. JSON ONLY."
-    if previous_questions: prompt += f"\nNo repeats: {previous_questions[-20:]}"
+    prompt = f"Act as a Medical Consultant. Create a {difficulty} quiz with {num} questions on {topic}. Output VALID JSON ONLY. Short explanations."
+    if previous_questions: prompt += f"\nAvoid these: {previous_questions[-20:]}"
     content = [prompt]
-    if input_type == "Text/PDF" and context_data: prompt += f"\nContext: {context_data[:10000]}..."; content = [prompt]
-    elif input_type == "Image" and context_data: prompt += "\nAnalyze image."; content = [prompt, context_data]
+    if input_type == "Text/PDF" and context_data:
+        prompt += f"\nContext: {context_data[:10000]}..."; content = [prompt]
+    elif input_type == "Image" and context_data:
+        prompt += "\nAnalyze image."; content = [prompt, context_data]
     prompt += "\nFormat: [{\"question\":\"...\", \"options\":{\"A\":\"..\",\"B\":\"..\",\"C\":\"..\",\"D\":\"..\"}, \"correct_option\":\"A\", \"explanation\":\"...\", \"extra_edge\":\"...\"}]"
     
     max_retries, timer = 3, st.empty()
@@ -99,12 +131,14 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
             timer.empty(); txt = response.text
             start, end = txt.find('['), txt.rfind(']') + 1
             return json.loads(txt[start:end])
-        except:
+        except ResourceExhausted:
             for t in range(20, 0, -1):
                 timer.warning(f"⚠️ Cooling down... {t}s"); time.sleep(1)
             timer.empty(); continue
+        except: return []
     return []
 
+# --- STORAGE ---
 def load_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -125,12 +159,14 @@ def create_report(topic, score, total, questions, answers):
     report = f"🎓 QUIZ MASTER REPORT\nTopic: {topic}\nScore: {score}/{total}\n" + "="*50 + "\n\n"
     for i, q in enumerate(questions):
         ans = answers.get(i) or answers.get(str(i))
-        report += f"Q{i+1}: {q['question']}\nSTATUS: {'✅ CORRECT' if ans == q['correct_option'] else f'❌ WRONG (Chose {ans})'}\n"
-        report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==q['correct_option'] else '  '} {k}: {v}" for k,v in q['options'].items()])
-        report += f"\n\nEXPLANATION: {q.get('explanation', 'N/A')}\nEXTRA EDGE: {q.get('extra_edge', 'N/A')}\n\n" + "="*50 + "\n\n" 
+        correct = q['correct_option']
+        report += f"Q{i+1}: {q['question']}\nSTATUS: {'✅ CORRECT' if ans == correct else f'❌ WRONG (Chose {ans})'}\n"
+        report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==correct else '  '} {k}: {v}" for k,v in q['options'].items()])
+        report += f"\n\nEXPLANATION: {q.get('explanation', 'N/A')}\nEXTRA EDGE: {q.get('extra_edge', 'N/A')}\n\n"
+        report += "="*50 + "\n\n" 
     return report
 
-# --- UI APP ---
+# --- UI LOGIC ---
 if 'page' not in st.session_state: st.session_state.page = "home"
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = []
 if 'user_answers' not in st.session_state: st.session_state.user_answers = {}
@@ -143,17 +179,19 @@ with st.sidebar:
     st.divider()
     if st.button("🏠 New Quiz"): st.session_state.page = "home"; st.rerun()
     st.subheader("📜 Recent History")
+    
+    # --- FIXED: AttributeError & IndentationError resolved below ---
     for i, item in enumerate(st.session_state.history):
         if st.button(f"{item['topic']} ({item['score']})", key=f"h_{i}"):
-           st.session_state.quiz_data = item['data']
-           st.session_state.user_answers = item.get('user_answers', {})
-           st.session_state.current_topic = item['topic'] 
-           st.session_state.saved = True 
-           st.session_state.current_index = 0
-           st.session_state.page = "scorecard"
-           st.rerun()
+            st.session_state.quiz_data = item['data']
+            st.session_state.user_answers = item.get('user_answers', {})
+            st.session_state.current_topic = item['topic'] 
+            st.session_state.saved = True 
+            st.session_state.current_index = 0
+            st.session_state.page = "scorecard"
+            st.rerun()
 
-apply_dark_theme()
+apply_quiz_ui()
 render_controls()
 
 if st.session_state.page == "home":
@@ -168,39 +206,64 @@ if st.session_state.page == "home":
     elif method == "Upload Image":
         topic = st.text_input("Topic Name"); f = st.file_uploader("Image", type=['png','jpg','jpeg'])
         if f: img = Image.open(f); st.image(img, width=200)
+    
     c1, c2 = st.columns(2)
-    diff, num = c1.select_slider("Difficulty", ["Easy", "Medium", "Hard"]), c2.slider("Questions", 5, 20, 10)
+    diff = c1.select_slider("Difficulty", ["Easy", "Medium", "Hard"])
+    num = c2.slider("Questions", 5, 20, 10)
+    
     if st.button("Start Quiz", type="primary"):
         with st.spinner("Generating..."):
-            st.session_state.current_topic, st.session_state.current_model = topic, model_choice
+            st.session_state.current_topic = topic
+            st.session_state.current_model = model_choice
             st.session_state.current_input_type = "Image" if img else "Text/PDF" if ctx else "Topic"
-            st.session_state.current_context, st.session_state.current_difficulty = (img if img else ctx), diff
+            st.session_state.current_context = (img if img else ctx)
+            st.session_state.current_difficulty = diff
+            
             data = generate_quiz(model_choice, topic, num, diff, st.session_state.current_input_type, st.session_state.current_context)
-            if data: st.session_state.quiz_data, st.session_state.user_answers, st.session_state.current_index, st.session_state.page = data, {}, 0, "quiz"; st.rerun()
+            if data: 
+                st.session_state.quiz_data = data
+                st.session_state.user_answers = {}
+                st.session_state.current_index = 0
+                st.session_state.page = "quiz"
+                st.rerun()
 
 elif st.session_state.page == "quiz":
     q = st.session_state.quiz_data[st.session_state.current_index]
     st.progress((st.session_state.current_index + 1) / len(st.session_state.quiz_data))
     st.subheader(f"Q: {q['question']}")
+    
     opts = list(q['options'].keys())
     prev = st.session_state.user_answers.get(st.session_state.current_index)
     sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}: {q['options'][x]}", key=f"r_{st.session_state.current_index}", index=opts.index(prev) if prev in opts else None)
+    
     if sel: st.session_state.user_answers[st.session_state.current_index] = sel
+    
     c1, c2 = st.columns(2)
-    if c1.button("Prev") and st.session_state.current_index > 0: st.session_state.current_index -= 1; st.rerun()
+    if c1.button("Prev") and st.session_state.current_index > 0: 
+        st.session_state.current_index -= 1
+        st.rerun()
+    
     if st.session_state.current_index < len(st.session_state.quiz_data) - 1:
-        if c2.button("Next"): st.session_state.current_index += 1; st.rerun()
-    elif c2.button("Finish"): st.session_state.page = "scorecard"; st.rerun()
+        if c2.button("Next"): 
+            st.session_state.current_index += 1
+            st.rerun()
+    elif c2.button("Finish"): 
+        st.session_state.page = "scorecard"
+        st.rerun()
 
 elif st.session_state.page == "scorecard":
     st.balloons()
     score = sum([1 for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)==q['correct_option']])
     st.title(f"Score: {score}/{len(st.session_state.quiz_data)}")
+    
     if 'saved' not in st.session_state:
-        st.session_state.history, st.session_state.saved = save_quiz(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers), True; st.rerun()
+        st.session_state.history = save_quiz(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
+        st.session_state.saved = True
+        st.rerun()
     
     wrongs = [str(i+1) for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)!=q['correct_option']]
     rights = [str(i+1) for i,q in enumerate(st.session_state.quiz_data) if st.session_state.user_answers.get(i)==q['correct_option']]
+    
     j1, j2 = st.columns(2)
     with j1: 
         st.markdown("**❌ Mistakes:**")
@@ -211,7 +274,10 @@ elif st.session_state.page == "scorecard":
         st.markdown(" | ".join([f"[{n}](#q{n})" for n in rights]))
 
     col1, col2, col3 = st.columns(3)
-    if col1.button("🏠 Home"): st.session_state.page = "home"; del st.session_state['saved']; st.rerun()
+    if col1.button("🏠 Home"): 
+        st.session_state.page = "home"
+        del st.session_state['saved']
+        st.rerun()
     with col2:
         report = create_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
         st.download_button("📥 Download Result", report, f"Quiz_{st.session_state.current_topic}.txt")
@@ -219,7 +285,12 @@ elif st.session_state.page == "scorecard":
         with st.spinner("Adding..."):
             exist = [q['question'] for q in st.session_state.quiz_data]
             new_data = generate_quiz(st.session_state.current_model, st.session_state.current_topic, 10, st.session_state.current_difficulty, st.session_state.current_input_type, st.session_state.current_context, exist)
-            if new_data: st.session_state.quiz_data.extend(new_data); del st.session_state['saved']; st.session_state.page = "quiz"; st.session_state.current_index = len(exist); st.rerun()
+            if new_data: 
+                st.session_state.quiz_data.extend(new_data)
+                del st.session_state['saved']
+                st.session_state.page = "quiz"
+                st.session_state.current_index = len(exist)
+                st.rerun()
 
     for i, q in enumerate(st.session_state.quiz_data):
         ans = st.session_state.user_answers.get(i)
@@ -231,6 +302,5 @@ elif st.session_state.page == "scorecard":
                 if opt == q['correct_option']: st.success(f"{opt}: {txt}")
                 elif opt == ans: st.error(f"{opt}: {txt}")
                 else: st.write(f"{opt}: {txt}")
-            st.info(f"**Explanation:** {q['explanation']}"); st.warning(f"**Extra Edge:** {q['extra_edge']}")
-
-
+            st.info(f"**Explanation:** {q['explanation']}")
+            st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
