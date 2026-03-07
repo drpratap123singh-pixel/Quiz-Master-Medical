@@ -108,14 +108,14 @@ def get_working_models():
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
-    # --- THE SUPER PROMPT ---
+    # --- THE SUPER PROMPT (UPDATED FOR MATCH-THE-FOLLOWING) ---
     prompt = f"""
     Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG / INICET.
     Generate {num} highly advanced MCQs on the topic: "{topic}".
     
     CRITICAL QUESTION RULES - YOU MUST INCLUDE A MIX OF THESE TYPES:
     1. Clinical Vignettes: Long scenarios (age, vitals, labs, history) asking for 'next best step' or 'pathophysiology'.
-    2. Match the Following: Present columns clearly in the question text.
+    2. Match the Following: YOU MUST EXPLICITLY TYPE OUT THE LIST OF ITEMS TO BE MATCHED DIRECTLY INSIDE THE "question" string! Do not leave the columns out. (Example format required in the question text: "Match the following: 1. Disease A, 2. Disease B WITH P. Feature X, Q. Feature Y"). 
     3. Statement Analysis: e.g., "Which of the following statements is INCORRECT?" with detailed, nuanced options.
     
     RULES FOR DISTRACTORS & EXPLANATIONS:
@@ -151,7 +151,6 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
             timer.empty(); continue
         except: return []
     return []
-
 # --- STORAGE ---
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -327,4 +326,5 @@ elif st.session_state.page == "scorecard":
                 else: st.write(f"{opt}: {txt}")
             st.info(f"**Explanation:** {q['explanation']}")
             st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
+
 
