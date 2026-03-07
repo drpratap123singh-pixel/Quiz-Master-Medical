@@ -107,14 +107,36 @@ def get_working_models():
 
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
-    prompt = f"Act as a Medical Consultant. Create a {difficulty} quiz with {num} questions on {topic}. Output VALID JSON ONLY. Short explanations."
-    if previous_questions: prompt += f"\nAvoid these: {previous_questions[-20:]}"
+    
+    # --- THE SUPER PROMPT ---
+    prompt = f"""
+    Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG / INICET.
+    Generate {num} highly advanced MCQs on the topic: "{topic}".
+    
+    CRITICAL QUESTION RULES - YOU MUST INCLUDE A MIX OF THESE TYPES:
+    1. Clinical Vignettes: Long scenarios (age, vitals, labs, history) asking for 'next best step' or 'pathophysiology'.
+    2. Match the Following: Present columns clearly in the question text.
+    3. Statement Analysis: e.g., "Which of the following statements is INCORRECT?" with detailed, nuanced options.
+    
+    RULES FOR DISTRACTORS & EXPLANATIONS:
+    - Make the wrong options highly plausible to test deep clinical understanding.
+    - Provide a short but detailed 'explanation' justifying the correct answer.
+    - Provide an 'extra_edge' containing a High-Yield Pearl or exception to the rule for EVERY question.
+    
+    Output VALID JSON ONLY.
+    """
+    
+    if previous_questions: prompt += f"\nDO NOT repeat these questions: {previous_questions[-20:]}"
     content = [prompt]
+    
     if input_type == "Text/PDF" and context_data:
-        prompt += f"\nContext: {context_data[:10000]}..."; content = [prompt]
+        prompt += f"\nGenerate questions strictly based on this Context: {context_data[:12000]}..."
+        content = [prompt]
     elif input_type == "Image" and context_data:
-        prompt += "\nAnalyze image."; content = [prompt, context_data]
-    prompt += "\nFormat: [{\"question\":\"...\", \"options\":{\"A\":\"..\",\"B\":\"..\",\"C\":\"..\",\"D\":\"..\"}, \"correct_option\":\"A\", \"explanation\":\"...\", \"extra_edge\":\"...\"}]"
+        prompt += "\nAnalyze the provided image and generate clinical questions based on its findings."
+        content = [prompt, context_data]
+        
+    prompt += '\nFormat exactly like this: [{"question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "correct_option":"A", "explanation":"...", "extra_edge":"..."}]'
     
     max_retries, timer = 3, st.empty()
     for attempt in range(max_retries):
@@ -305,3 +327,4 @@ elif st.session_state.page == "scorecard":
                 else: st.write(f"{opt}: {txt}")
             st.info(f"**Explanation:** {q['explanation']}")
             st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
+
