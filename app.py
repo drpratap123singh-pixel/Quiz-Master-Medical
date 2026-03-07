@@ -108,7 +108,7 @@ def get_working_models():
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
-    # --- THE SUPER PROMPT (UPDATED FOR MATCH-THE-FOLLOWING) ---
+    # --- THE SUPER PROMPT ---
     prompt = f"""
     Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG / INICET.
     Generate {num} highly advanced MCQs on the topic: "{topic}".
@@ -133,15 +133,21 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         prompt += f"\nGenerate questions strictly based on this Context: {context_data[:12000]}..."
         content = [prompt]
     elif input_type == "Image" and context_data:
-        prompt += "\nAnalyze the provided image and generate clinical questions based on its findings."
-        content = [prompt, context_data]
+        prompt += "\nAnalyze the provided image(s) and generate clinical questions based on the findings."
+        content = [prompt]
+        # Allow AI to read a single image or a list of multiple images
+        if isinstance(context_data, list):
+            content.extend(context_data)
+        else:
+            content.append(context_data)
         
     prompt += '\nFormat exactly like this: [{"question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "correct_option":"A", "explanation":"...", "extra_edge":"..."}]'
     
     max_retries, timer = 3, st.empty()
     for attempt in range(max_retries):
         try:
-            response = model.generate_content(content if input_type=="Image" else [prompt])
+            # We send the compiled prompt and all images together to the AI
+            response = model.generate_content(content)
             timer.empty(); txt = response.text
             start, end = txt.find('['), txt.rfind(']') + 1
             return json.loads(txt[start:end])
@@ -151,6 +157,7 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
             timer.empty(); continue
         except: return []
     return []
+
 # --- STORAGE ---
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -209,15 +216,23 @@ render_controls()
 if st.session_state.page == "home":
     st.title("🚀 Generate Quiz")
     method = st.radio("Source", ["Gemini Knowledge", "Paste Text", "Upload PDF", "Upload Image"], horizontal=True)
-    ctx, img = None, None
-    if method == "Gemini Knowledge": topic = st.text_input("Topic")
-    elif method == "Paste Text": topic = st.text_input("Topic Name"); ctx = st.text_area("Content")
+    ctx, img_list = None, []
+    
+    if method == "Gemini Knowledge": 
+        topic = st.text_input("Topic")
+    elif method == "Paste Text": 
+        topic = st.text_input("Topic Name"); ctx = st.text_area("Content")
     elif method == "Upload PDF":
         topic = st.text_input("Topic Name"); f = st.file_uploader("PDF", type='pdf')
         if f: reader = PyPDF2.PdfReader(f); ctx = "".join([p.extract_text() for p in reader.pages])
     elif method == "Upload Image":
-        topic = st.text_input("Topic Name"); f = st.file_uploader("Image", type=['png','jpg','jpeg'])
-        if f: img = Image.open(f); st.image(img, width=200)
+        topic = st.text_input("Topic Name")
+        # ALLOW MULTIPLE FILES UP TO 100MB
+        f_list = st.file_uploader("Upload Images (Max 100MB Total)", type=['png','jpg','jpeg'], accept_multiple_files=True)
+        if f_list:
+            st.success(f"{len(f_list)} image(s) loaded successfully.")
+            for file in f_list:
+                img_list.append(Image.open(file))
     
     c1, c2 = st.columns(2)
     diff = c1.select_slider("Difficulty", ["Easy", "Medium", "Hard"])
@@ -227,8 +242,8 @@ if st.session_state.page == "home":
         with st.spinner("Generating..."):
             st.session_state.current_topic = topic
             st.session_state.current_model = model_choice
-            st.session_state.current_input_type = "Image" if img else "Text/PDF" if ctx else "Topic"
-            st.session_state.current_context = (img if img else ctx)
+            st.session_state.current_input_type = "Image" if img_list else "Text/PDF" if ctx else "Topic"
+            st.session_state.current_context = (img_list if img_list else ctx)
             st.session_state.current_difficulty = diff
             
             data = generate_quiz(model_choice, topic, num, diff, st.session_state.current_input_type, st.session_state.current_context)
@@ -294,12 +309,9 @@ elif st.session_state.page == "scorecard":
         report = create_report(st.session_state.current_topic, score, len(st.session_state.quiz_data), st.session_state.quiz_data, st.session_state.user_answers)
         st.download_button("📥 Download Result", report, f"Quiz_{st.session_state.current_topic}.txt")
     
-    # --- FIXED: ADD 10 MORE BUTTON ---
     if col3.button("🔄 Add 10 More"):
         with st.spinner("Adding..."):
             exist = [q['question'] for q in st.session_state.quiz_data]
-            
-            # Use safe fallbacks if the user loaded this from history where settings weren't saved
             c_model = st.session_state.get('current_model', get_working_models()[0])
             c_diff = st.session_state.get('current_difficulty', "Medium")
             c_type = st.session_state.get('current_input_type', "Topic")
@@ -326,5 +338,3 @@ elif st.session_state.page == "scorecard":
                 else: st.write(f"{opt}: {txt}")
             st.info(f"**Explanation:** {q['explanation']}")
             st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
-
-
