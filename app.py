@@ -106,8 +106,8 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         if isinstance(context_data, list): content.extend(context_data)
         else: content.append(context_data)
         
-    prompt += '\nFormat exactly like this: [{"question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "correct_option":"A", "explanation":"...", "extra_edge":"..."}]'
-    
+prompt += '\nFormat exactly like this: [{"question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "correct_option":"<INSERT ACTUAL CORRECT LETTER HERE, e.g., C>", "explanation":"...", "extra_edge":"..."}]'
+
     max_retries, timer = 3, st.empty()
     for attempt in range(max_retries):
         try:
@@ -306,3 +306,4 @@ elif st.session_state.page == "scorecard":
                 
             st.info(f"**Explanation:** {q.get('explanation', 'N/A')}")
             st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
+
