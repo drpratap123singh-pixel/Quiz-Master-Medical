@@ -87,7 +87,19 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     - DO NOT put letters (A., B., C.) inside the option text itself. Just write the answer text. (e.g., write "Neutrophils", NOT "A. Neutrophils").
     - YOU MUST CALCULATE THE ACTUAL CORRECT ANSWER. Do NOT just default to "A". Put the single correct letter (A, B, C, or D) in the "correct_option" field.
     
-    Output VALID JSON ONLY.
+    Output VALID JSON ONLY matching this EXACT structure:
+    [{{
+        "question": "Question text here...", 
+        "options": {{
+            "A": "First option pure text",
+            "B": "Second option pure text",
+            "C": "Third option pure text",
+            "D": "Fourth option pure text"
+        }}, 
+        "correct_option": "<ACTUAL_CORRECT_LETTER_HERE>", 
+        "explanation": "Explanation here...", 
+        "extra_edge": "Pearl here..."
+    }}]
     """
     if previous_questions: prompt += f"\nDO NOT repeat these questions: {previous_questions[-20:]}"
     content = [prompt]
@@ -100,23 +112,6 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         content = [prompt]
         if isinstance(context_data, list): content.extend(context_data)
         else: content.append(context_data)
-        
-    # Using double brackets {{ }} so Python f-strings don't break on JSON
-    prompt += """
-    \nFormat exactly like this JSON array:
-    [{
-        "question": "Question text here...", 
-        "options": {
-            "A": "First option pure text",
-            "B": "Second option pure text",
-            "C": "Third option pure text",
-            "D": "Fourth option pure text"
-        }, 
-        "correct_option": "C", 
-        "explanation": "Explanation here...", 
-        "extra_edge": "Pearl here..."
-    }]
-    """
     
     max_retries, timer = 3, st.empty()
     for attempt in range(max_retries):
@@ -244,7 +239,6 @@ elif st.session_state.page == "quiz":
     opts = list(safe_opts.keys())
     
     prev = st.session_state.user_answers.get(st.session_state.current_index)
-    # FORMAT UPDATED HERE: Cleaned up to "A) Option text"
     sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}) {safe_opts[x]}", key=f"r_{st.session_state.current_index}", index=opts.index(prev) if prev in opts else None)
     
     if sel: st.session_state.user_answers[st.session_state.current_index] = sel
