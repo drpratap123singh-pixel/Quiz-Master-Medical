@@ -49,15 +49,12 @@ def apply_quiz_ui():
             background-color: #ffffff !important; color: #000000 !important; border: 1px solid #000000 !important; font-weight: bold !important;
         }}
         [data-testid="stSidebar"] button {{ text-align: left !important; border: none !important; background: transparent !important; }}
-        
-        /* Table Styling for Match the Following */
         table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; }}
         th, td {{ border: 1px solid #000000 !important; padding: 8px; text-align: left; }}
         th {{ background-color: #f0f2f6 !important; }}
         </style>
     """, unsafe_allow_html=True)
 
-# --- TOP BAR CONTROLS ---
 def render_controls():
     c1, c2, c3 = st.columns([8, 1, 1])
     with c2:
@@ -77,15 +74,17 @@ def get_working_models():
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
-    # --- THE SUPER PROMPT (UPDATED FOR MARKDOWN TABLES) ---
+    # --- PROMPT UPDATED TO FORCE 1,2,3,4 and P,Q,R,S ---
     prompt = f"""
     Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG.
     Generate {num} highly advanced MCQs on the topic: "{topic}".
     
     CRITICAL QUESTION RULES:
     1. Clinical Vignettes: Long scenarios asking for 'next best step' or mechanism.
-    2. Match the Following: YOU MUST FORMAT THE MATCHING LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! 
-       Example of required format inside the string:
+    2. Match the Following: FORMAT LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! 
+       - Column 1 MUST use numbers (1, 2, 3, 4).
+       - Column 2 MUST use letters (P, Q, R, S) to avoid confusing the A, B, C, D answer choices.
+       Example:
        "Match the following:
        | Column 1 | Column 2 |
        |---|---|
@@ -123,9 +122,17 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         except: return []
     return []
 
-# --- SAFE KEY EXTRACTOR ---
+# --- SAFE EXTRACTORS (CRASH PREVENTION) ---
 def get_correct_ans(q_dict):
     return q_dict.get('correct_option', q_dict.get('correct', q_dict.get('answer', 'A')))
+
+def get_safe_options(q_dict):
+    opts = q_dict.get('options', {})
+    if isinstance(opts, list):
+        return {chr(65+i): str(v) for i, v in enumerate(opts)}
+    if isinstance(opts, dict):
+        return opts
+    return {"A": str(opts)}
 
 # --- STORAGE ---
 def load_history():
@@ -150,7 +157,7 @@ def create_report(topic, score, total, questions, answers):
         ans = answers.get(i) or answers.get(str(i))
         correct = get_correct_ans(q)
         report += f"Q{i+1}: \n{q['question']}\nSTATUS: {'✅ CORRECT' if ans == correct else f'❌ WRONG (Chose {ans})'}\n"
-        report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==correct else '  '} {k}: {v}" for k,v in q.get('options', {}).items()])
+        report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==correct else '  '} {k}: {v}" for k,v in get_safe_options(q).items()])
         report += f"\n\nEXPLANATION: {q.get('explanation', 'N/A')}\nEXTRA EDGE: {q.get('extra_edge', 'N/A')}\n\n" + "="*50 + "\n\n" 
     return report
 
@@ -220,12 +227,13 @@ elif st.session_state.page == "quiz":
     q = st.session_state.quiz_data[st.session_state.current_index]
     st.progress((st.session_state.current_index + 1) / len(st.session_state.quiz_data))
     
-    # Render using Markdown so the tables display as grids!
     st.markdown(f"### Q: \n{q['question']}")
     
-    opts = list(q.get('options', {}).keys())
+    safe_opts = get_safe_options(q)
+    opts = list(safe_opts.keys())
+    
     prev = st.session_state.user_answers.get(st.session_state.current_index)
-    sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}: {q['options'][x]}", key=f"r_{st.session_state.current_index}", index=opts.index(prev) if prev in opts else None)
+    sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}: {safe_opts[x]}", key=f"r_{st.session_state.current_index}", index=opts.index(prev) if prev in opts else None)
     
     if sel: st.session_state.user_answers[st.session_state.current_index] = sel
     
@@ -287,13 +295,14 @@ elif st.session_state.page == "scorecard":
         correct_ans = get_correct_ans(q)
         st.markdown(f"<div id='q{i+1}'></div>", unsafe_allow_html=True)
         
-        # Kept the expander label simple so it doesn't break when a table is generated inside it
         with st.expander(f"Q{i+1} Review", expanded=False):
-            st.markdown(f"**{q['question']}**") # Renders the Markdown table beautifully inside!
+            st.markdown(f"**{q['question']}**") 
             st.write(f"**Your Answer:** {ans} | **Correct:** {correct_ans}")
-            for opt, txt in q.get('options', {}).items():
+            
+            for opt, txt in get_safe_options(q).items():
                 if opt == correct_ans: st.success(f"{opt}: {txt}")
                 elif opt == ans: st.error(f"{opt}: {txt}")
                 else: st.write(f"{opt}: {txt}")
+                
             st.info(f"**Explanation:** {q.get('explanation', 'N/A')}")
             st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
