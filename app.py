@@ -74,23 +74,18 @@ def get_working_models():
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
-    # --- PROMPT UPDATED TO FORCE 1,2,3,4 and P,Q,R,S ---
     prompt = f"""
     Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG.
     Generate {num} highly advanced MCQs on the topic: "{topic}".
     
     CRITICAL QUESTION RULES:
     1. Clinical Vignettes: Long scenarios asking for 'next best step' or mechanism.
-    2. Match the Following: FORMAT LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! 
-       - Column 1 MUST use numbers (1, 2, 3, 4).
-       - Column 2 MUST use letters (P, Q, R, S) to avoid confusing the A, B, C, D answer choices.
-       Example:
-       "Match the following:
-       | Column 1 | Column 2 |
-       |---|---|
-       | 1. Disease A | P. Feature X |
-       | 2. Disease B | Q. Feature Y |"
+    2. Match the Following: FORMAT LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! Use 1,2,3,4 for Column 1 and P,Q,R,S for Column 2.
     3. Statement Analysis: e.g., "Which statement is INCORRECT?"
+    
+    RULES FOR OPTIONS AND ANSWERS (CRITICAL):
+    - DO NOT put letters (A., B., C.) inside the option text itself. Just write the answer text. (e.g., write "Neutrophils", NOT "A. Neutrophils").
+    - YOU MUST CALCULATE THE ACTUAL CORRECT ANSWER. Do NOT just default to "A". Put the single correct letter (A, B, C, or D) in the "correct_option" field.
     
     Output VALID JSON ONLY.
     """
@@ -106,8 +101,23 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
         if isinstance(context_data, list): content.extend(context_data)
         else: content.append(context_data)
         
-prompt += '\nFormat exactly like this: [{"question":"...", "options":{"A":"..","B":"..","C":"..","D":".."}, "correct_option":"<INSERT ACTUAL CORRECT LETTER HERE, e.g., C>", "explanation":"...", "extra_edge":"..."}]'
-
+    # Using double brackets {{ }} so Python f-strings don't break on JSON
+    prompt += """
+    \nFormat exactly like this JSON array:
+    [{
+        "question": "Question text here...", 
+        "options": {
+            "A": "First option pure text",
+            "B": "Second option pure text",
+            "C": "Third option pure text",
+            "D": "Fourth option pure text"
+        }, 
+        "correct_option": "C", 
+        "explanation": "Explanation here...", 
+        "extra_edge": "Pearl here..."
+    }]
+    """
+    
     max_retries, timer = 3, st.empty()
     for attempt in range(max_retries):
         try:
@@ -122,16 +132,17 @@ prompt += '\nFormat exactly like this: [{"question":"...", "options":{"A":"..","
         except: return []
     return []
 
-# --- SAFE EXTRACTORS (CRASH PREVENTION) ---
+# --- SAFE EXTRACTORS ---
 def get_correct_ans(q_dict):
     return q_dict.get('correct_option', q_dict.get('correct', q_dict.get('answer', 'A')))
 
 def get_safe_options(q_dict):
     opts = q_dict.get('options', {})
     if isinstance(opts, list):
-        return {chr(65+i): str(v) for i, v in enumerate(opts)}
+        return {chr(65+i): str(v).strip().lstrip("ABCDabcd.) ") for i, v in enumerate(opts)}
     if isinstance(opts, dict):
-        return opts
+        # Strip any accidental letter prefixes the AI might still try to sneak in
+        return {k: str(v).strip().lstrip("ABCDabcd.) ") for k, v in opts.items()}
     return {"A": str(opts)}
 
 # --- STORAGE ---
@@ -157,7 +168,7 @@ def create_report(topic, score, total, questions, answers):
         ans = answers.get(i) or answers.get(str(i))
         correct = get_correct_ans(q)
         report += f"Q{i+1}: \n{q['question']}\nSTATUS: {'✅ CORRECT' if ans == correct else f'❌ WRONG (Chose {ans})'}\n"
-        report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==correct else '  '} {k}: {v}" for k,v in get_safe_options(q).items()])
+        report += f"OPTIONS:\n" + "\n".join([f" {'->' if k==correct else '  '} {k}) {v}" for k,v in get_safe_options(q).items()])
         report += f"\n\nEXPLANATION: {q.get('explanation', 'N/A')}\nEXTRA EDGE: {q.get('extra_edge', 'N/A')}\n\n" + "="*50 + "\n\n" 
     return report
 
@@ -233,7 +244,8 @@ elif st.session_state.page == "quiz":
     opts = list(safe_opts.keys())
     
     prev = st.session_state.user_answers.get(st.session_state.current_index)
-    sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}: {safe_opts[x]}", key=f"r_{st.session_state.current_index}", index=opts.index(prev) if prev in opts else None)
+    # FORMAT UPDATED HERE: Cleaned up to "A) Option text"
+    sel = st.radio("Choose:", opts, format_func=lambda x: f"{x}) {safe_opts[x]}", key=f"r_{st.session_state.current_index}", index=opts.index(prev) if prev in opts else None)
     
     if sel: st.session_state.user_answers[st.session_state.current_index] = sel
     
@@ -300,10 +312,9 @@ elif st.session_state.page == "scorecard":
             st.write(f"**Your Answer:** {ans} | **Correct:** {correct_ans}")
             
             for opt, txt in get_safe_options(q).items():
-                if opt == correct_ans: st.success(f"{opt}: {txt}")
-                elif opt == ans: st.error(f"{opt}: {txt}")
-                else: st.write(f"{opt}: {txt}")
+                if opt == correct_ans: st.success(f"{opt}) {txt}")
+                elif opt == ans: st.error(f"{opt}) {txt}")
+                else: st.write(f"{opt}) {txt}")
                 
             st.info(f"**Explanation:** {q.get('explanation', 'N/A')}")
             st.warning(f"**Extra Edge:** {q.get('extra_edge', 'N/A')}")
-
