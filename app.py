@@ -5,6 +5,7 @@ import json
 import os
 import datetime
 import time
+import re
 from PIL import Image
 import PyPDF2
 
@@ -80,11 +81,14 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     
     CRITICAL QUESTION RULES:
     1. Clinical Vignettes: Long scenarios asking for 'next best step' or mechanism.
-    2. Match the Following: FORMAT LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! Use 1,2,3,4 for Column 1 and P,Q,R,S for Column 2.
+    2. Match the Following: FORMAT LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! 
+       - MINGLE AND SCRAMBLE THE OPTIONS! The correct answer must NEVER be a straight line (e.g., NEVER 1-P, 2-Q, 3-R, 4-S).
+       - Use 1, 2, 3, 4 (or I, II, III, IV) for Column 1. 
+       - Use P, Q, R, S (or a, b, c, d) for Column 2.
     3. Statement Analysis: e.g., "Which statement is INCORRECT?"
     
     RULES FOR OPTIONS AND ANSWERS (CRITICAL):
-    - DO NOT put letters (A., B., C.) inside the option text itself. Just write the answer text. (e.g., write "Neutrophils", NOT "A. Neutrophils").
+    - DO NOT put letters (A., B., C.) inside the option text itself. Just write the answer text.
     - YOU MUST CALCULATE THE ACTUAL CORRECT ANSWER. Do NOT just default to "A". Put the single correct letter (A, B, C, or D) in the "correct_option" field.
     
     Output VALID JSON ONLY matching this EXACT structure:
@@ -131,14 +135,17 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
 def get_correct_ans(q_dict):
     return q_dict.get('correct_option', q_dict.get('correct', q_dict.get('answer', 'A')))
 
+def clean_option_text(text):
+    """Safely removes ONLY 'A.', 'B)', 'C:', etc. at the very start of the text"""
+    return re.sub(r"^[A-Da-d][\.\)\:]\s*", "", str(text)).strip()
+
 def get_safe_options(q_dict):
     opts = q_dict.get('options', {})
     if isinstance(opts, list):
-        return {chr(65+i): str(v).strip().lstrip("ABCDabcd.) ") for i, v in enumerate(opts)}
+        return {chr(65+i): clean_option_text(v) for i, v in enumerate(opts)}
     if isinstance(opts, dict):
-        # Strip any accidental letter prefixes the AI might still try to sneak in
-        return {k: str(v).strip().lstrip("ABCDabcd.) ") for k, v in opts.items()}
-    return {"A": str(opts)}
+        return {k: clean_option_text(v) for k, v in opts.items()}
+    return {"A": clean_option_text(opts)}
 
 # --- STORAGE ---
 def load_history():
@@ -231,9 +238,11 @@ if st.session_state.page == "home":
 
 elif st.session_state.page == "quiz":
     q = st.session_state.quiz_data[st.session_state.current_index]
-    st.progress((st.session_state.current_index + 1) / len(st.session_state.quiz_data))
+    idx = st.session_state.current_index
+    st.progress((idx + 1) / len(st.session_state.quiz_data))
     
-    st.markdown(f"### Q: \n{q['question']}")
+    # NEW: Displays Q1:, Q2:, etc.
+    st.markdown(f"### Q{idx + 1}: \n{q['question']}")
     
     safe_opts = get_safe_options(q)
     opts = list(safe_opts.keys())
