@@ -75,25 +75,33 @@ def get_working_models():
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
+    # --- PROMPT UPDATED: REMOVED MARKDOWN TABLE REQUIREMENT, USING SAFE LISTS ---
     prompt = f"""
     Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG.
     Generate {num} highly advanced MCQs on the topic: "{topic}".
     
     CRITICAL QUESTION RULES:
     1. Clinical Vignettes: Long scenarios asking for 'next best step' or mechanism.
-    2. Match the Following: FORMAT LISTS AS A MARKDOWN TABLE DIRECTLY INSIDE THE "question" STRING! 
-       - MINGLE AND SCRAMBLE THE OPTIONS! The correct answer must NEVER be a straight line (e.g., NEVER 1-P, 2-Q, 3-R, 4-S).
-       - Use 1, 2, 3, 4 (or I, II, III, IV) for Column 1. 
-       - Use P, Q, R, S (or a, b, c, d) for Column 2.
+    2. Match the Following: YOU MUST EXPLICITLY WRITE THE ITEMS TO MATCH DIRECTLY INSIDE THE "question" FIELD! 
+       - Do NOT use a Markdown table. Just use a clear list with spacing.
+       - Use 1, 2, 3, 4 for the first group.
+       - Use P, Q, R, S for the second group.
+       - SCRAMBLE THE CORRECT MATCHES (Never make it 1-P, 2-Q straight across).
+       Example of required text inside the question:
+       "Match the following pathogenesis features:
+       1. Macrophages      |  P. Produces autoantibodies
+       2. B cells          |  Q. Secretes TNF-alpha
+       3. Synoviocytes     |  R. Degrades cartilage
+       4. T cells          |  S. Activates macrophages"
     3. Statement Analysis: e.g., "Which statement is INCORRECT?"
     
     RULES FOR OPTIONS AND ANSWERS (CRITICAL):
     - DO NOT put letters (A., B., C.) inside the option text itself. Just write the answer text.
-    - YOU MUST CALCULATE THE ACTUAL CORRECT ANSWER. Do NOT just default to "A". Put the single correct letter (A, B, C, or D) in the "correct_option" field.
+    - YOU MUST CALCULATE THE ACTUAL CORRECT ANSWER. Put the single correct letter (A, B, C, or D) in the "correct_option" field.
     
     Output VALID JSON ONLY matching this EXACT structure:
     [{{
-        "question": "Question text here...", 
+        "question": "Question text here including the 1,2,3,4 and P,Q,R,S list...", 
         "options": {{
             "A": "First option pure text",
             "B": "Second option pure text",
@@ -136,7 +144,6 @@ def get_correct_ans(q_dict):
     return q_dict.get('correct_option', q_dict.get('correct', q_dict.get('answer', 'A')))
 
 def clean_option_text(text):
-    """Safely removes ONLY 'A.', 'B)', 'C:', etc. at the very start of the text"""
     return re.sub(r"^[A-Da-d][\.\)\:]\s*", "", str(text)).strip()
 
 def get_safe_options(q_dict):
@@ -241,7 +248,6 @@ elif st.session_state.page == "quiz":
     idx = st.session_state.current_index
     st.progress((idx + 1) / len(st.session_state.quiz_data))
     
-    # NEW: Displays Q1:, Q2:, etc.
     st.markdown(f"### Q{idx + 1}: \n{q['question']}")
     
     safe_opts = get_safe_options(q)
