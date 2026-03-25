@@ -125,7 +125,11 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     content = [prompt]
     
     if input_type == "Text/PDF" and context_data:
-        prompt += f"\nGenerate questions strictly based on this Context: {context_data[:12000]}..."
+        prompt += f"""
+        \nGenerate questions STRICTLY based on the clinical concepts, explanations, and high-yield pearls found in this Context document. 
+        Do NOT just copy the questions from the text. Instead, read the explanations/answers provided in the text and synthesize them into BRAND NEW, highly advanced clinical vignettes.
+        \nContext Document:\n{context_data}
+        """
         content = [prompt]
     elif input_type == "Image" and context_data:
         prompt += "\nAnalyze the provided image(s) and generate clinical questions."
