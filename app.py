@@ -75,24 +75,32 @@ def get_working_models():
 def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=None, previous_questions=[]):
     model = genai.GenerativeModel(model_name)
     
-    # --- PROMPT UPDATED: REMOVED MARKDOWN TABLE REQUIREMENT, USING SAFE LISTS ---
+    # --- PROMPT UPDATED: FORCING CLEAN LINE BREAKS FOR P, Q, R, S ---
     prompt = f"""
     Act as an expert Medical Examiner creating a {difficulty} level test for USMLE Step 2 / NEET PG.
     Generate {num} highly advanced MCQs on the topic: "{topic}".
     
     CRITICAL QUESTION RULES:
     1. Clinical Vignettes: Long scenarios asking for 'next best step' or mechanism.
-    2. Match the Following: YOU MUST EXPLICITLY WRITE THE ITEMS TO MATCH DIRECTLY INSIDE THE "question" FIELD! 
-       - Do NOT use a Markdown table. Just use a clear list with spacing.
-       - Use 1, 2, 3, 4 for the first group.
-       - Use P, Q, R, S for the second group.
-       - SCRAMBLE THE CORRECT MATCHES (Never make it 1-P, 2-Q straight across).
-       Example of required text inside the question:
+    2. Match the Following: YOU MUST EXPLICITLY FORMAT THE LISTS INTO TWO DISTINCT BLOCKS.
+       - EVERY single item MUST be on its own separate line using line breaks (\\n). 
+       - NEVER squish P, Q, R, S into a single paragraph.
+       Example of required structure inside the question text:
        "Match the following pathogenesis features:
-       1. Macrophages      |  P. Produces autoantibodies
-       2. B cells          |  Q. Secretes TNF-alpha
-       3. Synoviocytes     |  R. Degrades cartilage
-       4. T cells          |  S. Activates macrophages"
+       
+       **Group 1:**
+       1. Macrophages
+       2. B cells
+       3. Synoviocytes
+       4. T cells
+       
+       **Group 2:**
+       P. Produces autoantibodies
+       Q. Secretes TNF-alpha
+       R. Degrades cartilage
+       S. Activates macrophages"
+       
+       - SCRAMBLE THE CORRECT MATCHES (Never make it 1-P, 2-Q straight across).
     3. Statement Analysis: e.g., "Which statement is INCORRECT?"
     
     RULES FOR OPTIONS AND ANSWERS (CRITICAL):
@@ -101,7 +109,7 @@ def generate_quiz(model_name, topic, num, difficulty, input_type, context_data=N
     
     Output VALID JSON ONLY matching this EXACT structure:
     [{{
-        "question": "Question text here including the 1,2,3,4 and P,Q,R,S list...", 
+        "question": "Question text here including the perfectly spaced lists...", 
         "options": {{
             "A": "First option pure text",
             "B": "Second option pure text",
@@ -248,7 +256,8 @@ elif st.session_state.page == "quiz":
     idx = st.session_state.current_index
     st.progress((idx + 1) / len(st.session_state.quiz_data))
     
-    st.markdown(f"### Q{idx + 1}: \n{q['question']}")
+    # We use st.markdown to ensure bolding and list formatting renders perfectly
+    st.markdown(f"### Q{idx + 1}: \n\n{q['question']}")
     
     safe_opts = get_safe_options(q)
     opts = list(safe_opts.keys())
@@ -258,6 +267,7 @@ elif st.session_state.page == "quiz":
     
     if sel: st.session_state.user_answers[st.session_state.current_index] = sel
     
+    st.write("---")
     c1, c2 = st.columns(2)
     if c1.button("Prev") and st.session_state.current_index > 0: st.session_state.current_index -= 1; st.rerun()
     if st.session_state.current_index < len(st.session_state.quiz_data) - 1:
